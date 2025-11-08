@@ -428,27 +428,69 @@ class AccessibilityManager {
     /// - Returns: CGPoint with cursor screen position, or nil if unavailable
     func getCursorScreenPosition() -> CGPoint? {
         guard let focusedElement = getFocusedElement(from: AXUIElementCreateSystemWide()) else {
+            print("⚠️  No focused element for cursor position")
             return nil
         }
 
-        // Try to get insertion point bounds
-        if let positionValue = getAttributeValue(focusedElement, attribute: kAXInsertionPointLineNumberAttribute as CFString) {
-            print("📍 Insertion point available: \(positionValue)")
+        // Strategy 1: Get bounds for selected text range (most accurate)
+        // This gives us the actual cursor position within the text field
+        if let selectedRangeValue = getAttributeValue(focusedElement, attribute: kAXSelectedTextRangeAttribute as CFString) {
+            // Extract CFRange from AXValue
+            let axValue = selectedRangeValue as! AXValue
+            var range = CFRange()
+            let rangeSuccess = AXValueGetValue(axValue, .cfRange, &range)
+            
+            if rangeSuccess {
+                // Create AXValue for the range parameter
+                var mutableRange = range
+                guard let rangeAXValue = AXValueCreate(.cfRange, &mutableRange) else {
+                    print("⚠️  Could not create AXValue for range")
+                    return nil
+                }
+                
+                // Get bounds for this range
+                var boundsValue: CFTypeRef?
+                let boundsResult = AXUIElementCopyParameterizedAttributeValue(
+                    focusedElement,
+                    kAXBoundsForRangeParameterizedAttribute as CFString,
+                    rangeAXValue,
+                    &boundsValue
+                )
+                
+                if boundsResult == .success, let boundsValue = boundsValue {
+                    // Extract CGRect from the bounds AXValue
+                    var bounds = CGRect.zero
+                    let boundsAXValue = boundsValue as! AXValue
+                    let boundsSuccess = AXValueGetValue(boundsAXValue, .cgRect, &bounds)
+                    
+                    if boundsSuccess {
+                        // Return the bottom-left corner of the cursor bounds
+                        let cursorPosition = CGPoint(x: bounds.origin.x, y: bounds.origin.y)
+                        print("📍 Cursor position from bounds: (\(cursorPosition.x), \(cursorPosition.y))")
+                        return cursorPosition
+                    }
+                }
+            }
         }
 
-        // Get bounds of focused element as fallback
-        if let boundsValue = getAttributeValue(focusedElement, attribute: kAXPositionAttribute as CFString) {
-            let axValue = boundsValue as! AXValue
+        // Strategy 2: Get element position as fallback
+        // This gives us the element's top-left corner, not ideal but better than nothing
+        if let positionValue = getAttributeValue(focusedElement, attribute: kAXPositionAttribute as CFString) {
+            let axValue = positionValue as! AXValue
             var point = CGPoint.zero
             let success = AXValueGetValue(axValue, .cgPoint, &point)
-
+            
             if success {
+                print("📍 Cursor position from element bounds: (\(point.x), \(point.y))")
+                print("⚠️  Using element position as fallback (may not be exact cursor position)")
                 return point
             }
         }
 
-        // Ultimate fallback: use mouse cursor position
-        return NSEvent.mouseLocation
+        // Strategy 3: Ultimate fallback to mouse cursor position
+        let mousePosition = NSEvent.mouseLocation
+        print("📍 Using mouse position as fallback: (\(mousePosition.x), \(mousePosition.y))")
+        return mousePosition
     }
 
     // MARK: - Text Insertion (Phase 3)
