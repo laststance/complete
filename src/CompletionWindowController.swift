@@ -188,10 +188,7 @@ class CompletionWindowController: NSWindowController {
         let visibleFrame = screen.visibleFrame
         let windowSize = window.frame.size
 
-        // Horizontal offset (to the right of cursor)
-        let offsetX: CGFloat = 10
-
-        // Vertical offset depends on position preference
+        // Vertical offset from cursor (no horizontal offset - align directly like TextEdit)
         let offsetY: CGFloat = 20
 
         // Calculate initial position based on preference
@@ -199,29 +196,29 @@ class CompletionWindowController: NSWindowController {
 
         switch positionPreference {
         case .bottom:
-            // Position below cursor
+            // Position below cursor, aligned directly underneath
             origin = CGPoint(
-                x: point.x + offsetX,
+                x: point.x,
                 y: point.y - offsetY - windowSize.height
             )
 
         case .top:
-            // Position above cursor
+            // Position above cursor, aligned directly
             origin = CGPoint(
-                x: point.x + offsetX,
+                x: point.x,
                 y: point.y + offsetY
             )
         }
 
         // Adjust horizontally if off-screen
         if origin.x + windowSize.width > visibleFrame.maxX {
-            // Try positioning to the left of cursor
-            origin.x = point.x - offsetX - windowSize.width
+            // Shift left to keep on screen
+            origin.x = visibleFrame.maxX - windowSize.width - 10
+        }
 
-            // If still off-screen, clamp to visible area
-            if origin.x < visibleFrame.minX {
-                origin.x = visibleFrame.maxX - windowSize.width - 10
-            }
+        // Ensure not off left edge
+        if origin.x < visibleFrame.minX {
+            origin.x = visibleFrame.minX + 10
         }
 
         // Clamp horizontally to visible frame

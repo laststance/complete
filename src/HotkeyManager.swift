@@ -80,9 +80,21 @@ class HotkeyManager {
             print("   \(index + 1). \(completion)")
         }
 
-        // Phase 5: Show completion window with suggestions
+        // Get cursor screen position for accurate window placement
+        let cursorPosition = AccessibilityManager.shared.getCursorScreenPosition()
+        if let position = cursorPosition {
+            print("📍 Cursor position: (\(position.x), \(position.y))")
+        } else {
+            print("⚠️  Could not get cursor position, will use mouse location fallback")
+        }
+
+        // Phase 5: Show completion window with suggestions at cursor position
         Task { @MainActor in
-            CompletionWindowController.shared.show(completions: completions, textContext: textContext)
+            CompletionWindowController.shared.show(
+                completions: completions,
+                textContext: textContext,
+                near: cursorPosition
+            )
             print("✅ Completion window displayed with \(completions.count) suggestions")
         }
     }
