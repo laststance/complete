@@ -504,9 +504,19 @@ class AccessibilityManager {
             return nil
         }
 
-        // Create new text with completion
-        let beforeWord = String(currentText.prefix(context.cursorPosition - wordLength))
-        let afterCursor = String(currentText.suffix(currentText.count - context.cursorPosition))
+        // Defensive bounds checking to prevent crashes
+        // Clamp cursor position to valid text range
+        let validCursorPosition = min(context.cursorPosition, currentText.count)
+        let validStartPosition = max(0, validCursorPosition - wordLength)
+        
+        // Log if we had to adjust positions (indicates potential timing/sync issues)
+        if validCursorPosition != context.cursorPosition {
+            print("⚠️  Cursor position adjusted: \(context.cursorPosition) → \(validCursorPosition) (text length: \(currentText.count))")
+        }
+
+        // Create new text with completion (using safe bounds)
+        let beforeWord = String(currentText.prefix(validStartPosition))
+        let afterCursor = String(currentText.suffix(max(0, currentText.count - validCursorPosition)))
         let newText = beforeWord + completion + afterCursor
 
         // Try to set new text
@@ -532,8 +542,16 @@ class AccessibilityManager {
             return false
         }
 
-        let beforeCursor = String(currentText.prefix(position))
-        let afterCursor = String(currentText.suffix(currentText.count - position))
+        // Defensive bounds checking to prevent crashes
+        let validPosition = min(position, currentText.count)
+        
+        // Log if we had to adjust position
+        if validPosition != position {
+            print("⚠️  Insertion position adjusted: \(position) → \(validPosition) (text length: \(currentText.count))")
+        }
+
+        let beforeCursor = String(currentText.prefix(validPosition))
+        let afterCursor = String(currentText.suffix(max(0, currentText.count - validPosition)))
         let newText = beforeCursor + text + afterCursor
 
         let result = AXUIElementSetAttributeValue(
