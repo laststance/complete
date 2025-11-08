@@ -29,9 +29,9 @@ class CompletionWindowController: NSWindowController {
     // MARK: - Initialization
 
     private init() {
-        // Create borderless, floating panel
+        // Create borderless, floating panel with narrow width for vertical list
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 400),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -91,6 +91,25 @@ class CompletionWindowController: NSWindowController {
         viewModel.completions = completions
         viewModel.textContext = textContext
         viewModel.selectedIndex = min(selectedIndex, completions.count - 1)
+
+        // Calculate dynamic window size based on completion count
+        let itemHeight: CGFloat = 22
+        let padding: CGFloat = 8  // top + bottom padding
+        let shadowSpace: CGFloat = 20
+        let minHeight: CGFloat = 60
+        let maxHeight: CGFloat = 600
+        let windowWidth: CGFloat = 220
+
+        // Calculate required height for all items
+        let calculatedHeight = CGFloat(completions.count) * itemHeight + padding * 2 + shadowSpace
+        let finalHeight = min(maxHeight, max(minHeight, calculatedHeight))
+
+        // Resize window to fit content
+        if let window = window {
+            var frame = window.frame
+            frame.size = NSSize(width: windowWidth, height: finalHeight)
+            window.setFrame(frame, display: false)
+        }
 
         // Position window
         if let position = cursorPosition {

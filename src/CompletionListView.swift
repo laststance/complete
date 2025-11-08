@@ -52,7 +52,7 @@ struct CompletionListView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 300)  // Max 300pt height for scrollable list
+                .frame(maxHeight: 600)  // Max 600pt height for scrollable list
             } else {
                 Text("No completions")
                     .foregroundColor(textColor.opacity(0.5))
@@ -62,7 +62,7 @@ struct CompletionListView: View {
         .background(backgroundColor)
         .cornerRadius(cornerRadius)
         .shadow(color: shadowColor, radius: 10, x: 0, y: 2)
-        .frame(width: 280)  // Fixed width for consistent appearance
+        .frame(width: 200)  // Fixed width for narrow vertical appearance
     }
 }
 
