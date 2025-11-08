@@ -1,9 +1,10 @@
 ---
 id: task-15
 title: 'Research: LSUIElement app distribution and notarization'
-status: To Do
+status: Done
 assignee: []
 created_date: '2025-11-08 03:54'
+updated_date: '2025-11-08 04:01'
 labels:
   - research
   - distribution
@@ -25,3 +26,9 @@ Research requirements for distributing LSUIElement apps. Investigate notarizatio
 - [ ] #3 Distribution options identified
 - [ ] #4 App Store guidelines reviewed
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Research completed by deep-research-agent. Key findings: LSUIElement apps require same notarization as regular apps. Need Developer ID certificate, hardened runtime, accessibility entitlements. Timeline: 15-30 min per build after setup. Direct download recommended over App Store for accessibility apps.
+<!-- SECTION:NOTES:END -->
