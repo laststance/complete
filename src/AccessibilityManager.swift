@@ -441,6 +441,8 @@ class AccessibilityManager {
             let rangeSuccess = AXValueGetValue(axValue, .cfRange, &range)
             
             if rangeSuccess {
+                print("📍 Selected range: location=\(range.location), length=\(range.length)")
+                
                 // Create AXValue for the range parameter
                 var mutableRange = range
                 guard let rangeAXValue = AXValueCreate(.cfRange, &mutableRange) else {
@@ -464,9 +466,26 @@ class AccessibilityManager {
                     let boundsSuccess = AXValueGetValue(boundsAXValue, .cgRect, &bounds)
                     
                     if boundsSuccess {
-                        // Return the bottom-left corner of the cursor bounds
-                        let cursorPosition = CGPoint(x: bounds.origin.x, y: bounds.origin.y)
-                        print("📍 Cursor position from bounds: (\(cursorPosition.x), \(cursorPosition.y))")
+                        print("📍 Cursor bounds rect: \(bounds)")
+                        print("   - origin: (\(bounds.origin.x), \(bounds.origin.y))")
+                        print("   - size: (\(bounds.width) × \(bounds.height))")
+                        print("   - minY: \(bounds.minY), maxY: \(bounds.maxY)")
+                        
+                        // Get screen info for coordinate system verification
+                        if let screen = NSScreen.main {
+                            print("   - Screen frame: \(screen.frame)")
+                            print("   - Screen has flipped coordinates: \(screen.frame.origin.y == 0)")
+                        }
+                        
+                        // CRITICAL: Accessibility API bounds use FLIPPED coordinates (top-left origin)
+                        // This is different from standard macOS screen coordinates (bottom-left origin)
+                        // bounds.origin.y is the TOP of the cursor in this flipped system
+                        // To position window BELOW cursor, we need bounds.maxY (bottom of cursor)
+                        let cursorBottomY = bounds.maxY
+                        let cursorX = bounds.origin.x
+                        
+                        let cursorPosition = CGPoint(x: cursorX, y: cursorBottomY)
+                        print("📍 Cursor position (bottom of cursor for below placement): (\(cursorPosition.x), \(cursorPosition.y))")
                         return cursorPosition
                     }
                 }

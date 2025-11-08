@@ -180,6 +180,9 @@ class CompletionWindowController: NSWindowController {
     ///   - window: The window to position
     ///   - point: Screen coordinates to position relative to
     private func calculatePosition(for window: NSWindow, relativeTo point: CGPoint) {
+        print("\n🎯 POSITIONING WINDOW")
+        print("   Input point (cursor position): (\(point.x), \(point.y))")
+        
         // Find the screen containing the point (multi-monitor support)
         let screen = NSScreen.screens.first { screen in
             NSMouseInRect(point, screen.frame, false)
@@ -187,6 +190,10 @@ class CompletionWindowController: NSWindowController {
 
         let visibleFrame = screen.visibleFrame
         let windowSize = window.frame.size
+        
+        print("   Screen frame: \(screen.frame)")
+        print("   Screen visible frame: \(visibleFrame)")
+        print("   Window size: \(windowSize)")
 
         // Vertical offset from cursor (no horizontal offset - align directly like TextEdit)
         let offsetY: CGFloat = 20
@@ -201,6 +208,7 @@ class CompletionWindowController: NSWindowController {
                 x: point.x,
                 y: point.y - offsetY - windowSize.height
             )
+            print("   Position preference: BELOW cursor")
 
         case .top:
             // Position above cursor, aligned directly
@@ -208,33 +216,55 @@ class CompletionWindowController: NSWindowController {
                 x: point.x,
                 y: point.y + offsetY
             )
+            print("   Position preference: ABOVE cursor")
         }
+        
+        print("   Initial calculated origin: (\(origin.x), \(origin.y))")
 
         // Adjust horizontally if off-screen
         if origin.x + windowSize.width > visibleFrame.maxX {
+            let oldX = origin.x
             // Shift left to keep on screen
             origin.x = visibleFrame.maxX - windowSize.width - 10
+            print("   ⚠️  Adjusted X (off right edge): \(oldX) → \(origin.x)")
         }
 
         // Ensure not off left edge
         if origin.x < visibleFrame.minX {
+            let oldX = origin.x
             origin.x = visibleFrame.minX + 10
+            print("   ⚠️  Adjusted X (off left edge): \(oldX) → \(origin.x)")
         }
 
         // Clamp horizontally to visible frame
-        origin.x = max(visibleFrame.minX + 10, min(origin.x, visibleFrame.maxX - windowSize.width - 10))
+        let clampedX = max(visibleFrame.minX + 10, min(origin.x, visibleFrame.maxX - windowSize.width - 10))
+        if clampedX != origin.x {
+            print("   ⚠️  Clamped X: \(origin.x) → \(clampedX)")
+            origin.x = clampedX
+        }
 
         // Adjust vertically if off-screen
         if origin.y < visibleFrame.minY {
+            let oldY = origin.y
             // Bottom edge: position above cursor instead
             origin.y = point.y + offsetY
+            print("   ⚠️  Adjusted Y (off bottom edge): \(oldY) → \(origin.y) (flipped to above)")
         } else if origin.y + windowSize.height > visibleFrame.maxY {
+            let oldY = origin.y
             // Top edge: position below cursor instead
             origin.y = point.y - offsetY - windowSize.height
+            print("   ⚠️  Adjusted Y (off top edge): \(oldY) → \(origin.y) (flipped to below)")
         }
 
         // Clamp vertically to visible frame
-        origin.y = max(visibleFrame.minY + 10, min(origin.y, visibleFrame.maxY - windowSize.height - 10))
+        let clampedY = max(visibleFrame.minY + 10, min(origin.y, visibleFrame.maxY - windowSize.height - 10))
+        if clampedY != origin.y {
+            print("   ⚠️  Clamped Y: \(origin.y) → \(clampedY)")
+            origin.y = clampedY
+        }
+        
+        print("   FINAL window origin: (\(origin.x), \(origin.y))")
+        print("   Window will cover: Y from \(origin.y) to \(origin.y + windowSize.height)")
 
         window.setFrameOrigin(origin)
     }
