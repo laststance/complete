@@ -61,3 +61,15 @@ node_modules/
 *.orig
 *.swp
 *~
+
+# Serena MCP
+.serena/
+
+# Claude Code documentation
+claudedocs/
+
+# Distribution artifacts
+dist/
+*.dmg
+*.zip
+Complete-*.dmg

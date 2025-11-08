@@ -1,0 +1,273 @@
+#!/bin/bash
+#
+# Complete - Notarization Workflow Script
+# Automates building, signing, and notarizing the Complete autocomplete app
+#
+# Prerequisites:
+# 1. Apple Developer account with Developer ID Application certificate
+# 2. Stored notarization credentials (see docs/distribution-guide.md)
+# 3. Swift 5.9+ and Xcode Command Line Tools installed
+#
+# Usage:
+#   ./notarize.sh [options]
+#
+# Options:
+#   --developer-id ID    Your Developer ID (default: from env DEVELOPER_ID)
+#   --keychain-profile   Keychain profile name (default: Complete-Notarization)
+#   --skip-build         Skip build step (use existing binary)
+#   --skip-notarization  Skip notarization (for testing)
+#   --output DIR         Output directory (default: ./dist)
+#   --help               Show this help message
+#
+# Environment Variables:
+#   DEVELOPER_ID         Developer ID Application certificate name
+#   KEYCHAIN_PROFILE     notarytool keychain profile name
+#
+# Example:
+#   export DEVELOPER_ID="Developer ID Application: Your Name (TEAM_ID)"
+#   ./notarize.sh
+#
+
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+
+# Configuration
+APP_NAME="Complete"
+BUILD_DIR=".build/release"
+OUTPUT_DIR="./dist"
+ENTITLEMENTS="Complete.entitlements"
+SKIP_BUILD=false
+SKIP_NOTARIZATION=false
+
+# Defaults (can be overridden by environment or arguments)
+DEVELOPER_ID="${DEVELOPER_ID:-}"
+KEYCHAIN_PROFILE="${KEYCHAIN_PROFILE:-Complete-Notarization}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Functions
+print_step() {
+    echo -e "${BLUE}▶ $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}✗ $1${NC}"
+    exit 1
+}
+
+show_help() {
+    grep '^#' "$0" | grep -v '#!/bin/bash' | sed 's/^# //; s/^#//'
+    exit 0
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --developer-id)
+            DEVELOPER_ID="$2"
+            shift 2
+            ;;
+        --keychain-profile)
+            KEYCHAIN_PROFILE="$2"
+            shift 2
+            ;;
+        --skip-build)
+            SKIP_BUILD=true
+            shift
+            ;;
+        --skip-notarization)
+            SKIP_NOTARIZATION=true
+            shift
+            ;;
+        --output)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --help)
+            show_help
+            ;;
+        *)
+            print_error "Unknown option: $1\nUse --help for usage information"
+            ;;
+    esac
+done
+
+# Validate prerequisites
+print_step "Validating prerequisites..."
+
+if [ -z "$DEVELOPER_ID" ]; then
+    print_error "DEVELOPER_ID not set. Use --developer-id or set DEVELOPER_ID environment variable."
+fi
+
+if ! command -v swift &> /dev/null; then
+    print_error "Swift not found. Install Xcode Command Line Tools."
+fi
+
+if ! command -v xcrun &> /dev/null; then
+    print_error "xcrun not found. Install Xcode Command Line Tools."
+fi
+
+if [ ! -f "$ENTITLEMENTS" ]; then
+    print_error "Entitlements file not found: $ENTITLEMENTS"
+fi
+
+# Verify Developer ID certificate is installed
+if ! security find-identity -p basic -v | grep -q "$DEVELOPER_ID"; then
+    print_error "Developer ID certificate not found in Keychain: $DEVELOPER_ID"
+fi
+
+print_success "Prerequisites validated"
+
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+
+# Step 1: Build (optional)
+if [ "$SKIP_BUILD" = true ]; then
+    print_warning "Skipping build step"
+    if [ ! -f "$BUILD_DIR/$APP_NAME" ]; then
+        print_error "Binary not found: $BUILD_DIR/$APP_NAME"
+    fi
+else
+    print_step "Building for release..."
+
+    # Clean previous build
+    swift package clean
+
+    # Build release
+    swift build -c release
+
+    if [ ! -f "$BUILD_DIR/$APP_NAME" ]; then
+        print_error "Build failed: Binary not found at $BUILD_DIR/$APP_NAME"
+    fi
+
+    print_success "Build complete: $BUILD_DIR/$APP_NAME"
+fi
+
+# Step 2: Code Sign Binary
+print_step "Signing binary with hardened runtime..."
+
+codesign --force --options runtime \
+  --entitlements "$ENTITLEMENTS" \
+  --sign "$DEVELOPER_ID" \
+  --timestamp \
+  "$BUILD_DIR/$APP_NAME"
+
+# Verify signature
+print_step "Verifying signature..."
+codesign -dv --verbose=4 "$BUILD_DIR/$APP_NAME" 2>&1 | grep -q "runtime" || \
+    print_error "Hardened runtime not enabled in signature"
+
+print_success "Binary signed successfully"
+
+# Step 3: Create DMG
+print_step "Creating DMG package..."
+
+DMG_NAME="${APP_NAME}-$(date +%Y%m%d).dmg"
+DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
+
+# Remove existing DMG if present
+[ -f "$DMG_PATH" ] && rm "$DMG_PATH"
+
+# Create temporary directory for DMG contents
+TEMP_DMG_DIR=$(mktemp -d)
+cp "$BUILD_DIR/$APP_NAME" "$TEMP_DMG_DIR/"
+
+# Create DMG
+hdiutil create -volname "$APP_NAME" \
+  -srcfolder "$TEMP_DMG_DIR" \
+  -ov -format UDZO \
+  "$DMG_PATH"
+
+# Clean up temporary directory
+rm -rf "$TEMP_DMG_DIR"
+
+print_success "DMG created: $DMG_PATH"
+
+# Step 4: Sign DMG
+print_step "Signing DMG..."
+
+codesign --sign "$DEVELOPER_ID" \
+  --timestamp \
+  "$DMG_PATH"
+
+print_success "DMG signed successfully"
+
+# Step 5: Notarization (optional)
+if [ "$SKIP_NOTARIZATION" = true ]; then
+    print_warning "Skipping notarization step"
+    print_success "Distribution package ready: $DMG_PATH"
+    print_warning "Note: Package is NOT notarized. Users will see Gatekeeper warnings."
+    exit 0
+fi
+
+print_step "Submitting for notarization..."
+print_warning "This may take 5-30 minutes. Please wait..."
+
+# Submit and wait for notarization
+SUBMISSION_OUTPUT=$(xcrun notarytool submit "$DMG_PATH" \
+  --keychain-profile "$KEYCHAIN_PROFILE" \
+  --wait 2>&1)
+
+# Check if notarization succeeded
+if echo "$SUBMISSION_OUTPUT" | grep -q "status: Accepted"; then
+    print_success "Notarization accepted"
+
+    # Extract submission ID for reference
+    SUBMISSION_ID=$(echo "$SUBMISSION_OUTPUT" | grep -m 1 "id:" | awk '{print $2}')
+    echo "  Submission ID: $SUBMISSION_ID"
+else
+    print_error "Notarization failed. Output:\n$SUBMISSION_OUTPUT"
+fi
+
+# Step 6: Staple Ticket
+print_step "Stapling notarization ticket..."
+
+xcrun stapler staple "$DMG_PATH"
+
+# Verify stapling
+if xcrun stapler validate "$DMG_PATH" | grep -q "The validate action worked"; then
+    print_success "Ticket stapled successfully"
+else
+    print_error "Stapling failed"
+fi
+
+# Step 7: Final Verification
+print_step "Performing final verification..."
+
+SPCTL_OUTPUT=$(spctl -a -vv -t install "$DMG_PATH" 2>&1)
+
+if echo "$SPCTL_OUTPUT" | grep -q "accepted"; then
+    print_success "Gatekeeper verification passed"
+else
+    print_warning "Gatekeeper verification returned unexpected result:\n$SPCTL_OUTPUT"
+fi
+
+# Summary
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo -e "${GREEN}✓ Distribution package ready!${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Package: $DMG_PATH"
+echo "  Status:  Signed and Notarized"
+echo ""
+echo "Next Steps:"
+echo "  1. Test on a clean macOS system"
+echo "  2. Upload to distribution server"
+echo "  3. Update release notes"
+echo "  4. Announce release"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

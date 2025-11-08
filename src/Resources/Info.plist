@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Application identifier -->
+    <key>CFBundleIdentifier</key>
+    <string>io.laststance.complete</string>
+
+    <!-- Application name -->
+    <key>CFBundleName</key>
+    <string>Complete</string>
+
+    <!-- Display name -->
+    <key>CFBundleDisplayName</key>
+    <string>Complete</string>
+
+    <!-- Version -->
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- Package type -->
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <!-- Executable -->
+    <key>CFBundleExecutable</key>
+    <string>Complete</string>
+
+    <!-- CRITICAL: LSUIElement = YES prevents dock icon and menu bar -->
+    <!-- App runs as background agent (agent application) -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <!-- Minimum system version (macOS 14.0 Sonoma) -->
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+
+    <!-- Category -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+
+    <!-- High resolution capable -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Privacy - Accessibility usage description -->
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Complete needs accessibility access to read text at cursor position and insert completions in any application.</string>
+
+    <!-- Support dark mode -->
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+</dict>
+</plist>
