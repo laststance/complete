@@ -7,6 +7,9 @@ struct CompletionListView: View {
     // MARK: - Properties
 
     @ObservedObject var viewModel: CompletionViewModel
+    
+    // Focus state to ensure keyboard input works immediately
+    @FocusState private var isFocused: Bool
 
     // MARK: - Constants
 
@@ -63,6 +66,15 @@ struct CompletionListView: View {
         .cornerRadius(cornerRadius)
         .shadow(color: shadowColor, radius: 10, x: 0, y: 2)
         .frame(width: 200)  // Fixed width for narrow vertical appearance
+        .focusable()  // Make the view focusable for keyboard input
+        .focused($isFocused)  // Bind to focus state
+        .onAppear {
+            // Automatically set focus when view appears
+            // Small delay ensures window is fully initialized
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isFocused = true
+            }
+        }
     }
 }
 

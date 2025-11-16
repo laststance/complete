@@ -7,6 +7,13 @@ enum WindowPosition {
     case bottom // Below cursor
 }
 
+/// Custom NSPanel subclass that can become key window to receive keyboard events
+class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool {
+        return true
+    }
+}
+
 /// Window controller for the floating completion panel
 /// Manages an always-on-top, borderless NSPanel for displaying completions
 class CompletionWindowController: NSWindowController {
@@ -30,9 +37,9 @@ class CompletionWindowController: NSWindowController {
 
     private init() {
         // Create borderless, floating panel with narrow width for vertical list
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 220, height: 400),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -42,15 +49,21 @@ class CompletionWindowController: NSWindowController {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.level = .floating  // Always on top
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
 
-        // Panel should not activate the application
+        // Panel should not activate the application but can receive key events
         panel.hidesOnDeactivate = false
 
         super.init(window: panel)
 
         // Set up SwiftUI content
         setupSwiftUIContent()
+
+        // Set up window notifications
+        setupWindowNotifications()
+
+        // Set up workspace notifications for space changes
+        setupWorkspaceNotifications()
     }
 
     required init?(coder: NSCoder) {
@@ -69,7 +82,44 @@ class CompletionWindowController: NSWindowController {
 
         // Set as window content
         window?.contentViewController = hosting
+        window?.delegate = self
         hostingController = hosting
+    }
+
+    // MARK: - Notification Setup
+
+    /// Set up window lifecycle notifications
+    private func setupWindowNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidResignKey(_:)),
+            name: NSWindow.didResignKeyNotification,
+            object: window
+        )
+    }
+
+    /// Set up workspace notifications for desktop/space changes
+    private func setupWorkspaceNotifications() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(activeSpaceDidChange),
+            name: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil
+        )
+    }
+
+    // MARK: - Notification Handlers
+
+    @objc func windowDidResignKey(_ notification: Notification) {
+        // Hide popup when window loses key status
+        print("ℹ️  Window resigned key status - hiding popup")
+        hide()
+    }
+
+    @objc private func activeSpaceDidChange(_ notification: Notification) {
+        // Hide popup when user switches spaces/desktops
+        print("ℹ️  Active space changed - hiding popup")
+        hide()
     }
 
     // MARK: - Public API
@@ -118,17 +168,31 @@ class CompletionWindowController: NSWindowController {
             positionWindowAtCursor()
         }
 
-        // Show window
-        window?.orderFrontRegardless()
+        // Activate app to receive keyboard events (required for LSUIElement background agents)
+        print("🎯 Activating app for keyboard focus")
+        NSApp.activate(ignoringOtherApps: true)
+        print("🎯 App activated: \(NSApp.isActive)")
+
+        // Show window and establish keyboard focus
+        window?.makeKeyAndOrderFront(nil)
+        print("🎯 Window is key: \(window?.isKeyWindow ?? false)")
+
+        // Ensure window accepts keyboard input
+        window?.makeFirstResponder(window?.contentView)
+        print("🎯 First responder set: \(window?.firstResponder != nil)")
 
         // Set up keyboard monitoring
         setupKeyboardMonitoring()
+
+        // Set up global click monitoring to detect clicks outside
+        setupClickMonitoring()
     }
 
     /// Hide completion window
     func hide() {
         window?.orderOut(nil)
         removeKeyboardMonitoring()
+        removeClickMonitoring()
 
         // Clear view model
         viewModel.completions = []
@@ -280,6 +344,42 @@ class CompletionWindowController: NSWindowController {
         }
     }
 
+    // MARK: - Click Monitoring
+
+    private var clickMonitor: Any?
+
+    /// Set up global click monitoring to detect clicks outside the window
+    private func setupClickMonitoring() {
+        removeClickMonitoring()
+        
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self = self, self.isVisible else { return }
+            
+            // Check if click is outside our window
+            if let window = self.window {
+                let clickLocation = event.locationInWindow
+                let windowFrame = window.frame
+                let screenClickLocation = NSPoint(
+                    x: clickLocation.x + window.frame.origin.x,
+                    y: clickLocation.y + window.frame.origin.y
+                )
+                
+                if !windowFrame.contains(screenClickLocation) {
+                    print("ℹ️  Click outside popup detected - hiding")
+                    self.hide()
+                }
+            }
+        }
+    }
+
+    /// Remove click monitoring
+    private func removeClickMonitoring() {
+        if let monitor = clickMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickMonitor = nil
+        }
+    }
+
     // MARK: - Keyboard Monitoring
 
     private var keyboardMonitor: Any?
@@ -289,7 +389,7 @@ class CompletionWindowController: NSWindowController {
         // Remove existing monitor if any
         removeKeyboardMonitoring()
 
-        // Monitor key down events
+        // Use both local and global monitors for better coverage
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self, self.isVisible else {
                 return event
@@ -369,5 +469,17 @@ class CompletionWindowController: NSWindowController {
 
     deinit {
         removeKeyboardMonitoring()
+        removeClickMonitoring()
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+}
+
+// MARK: - NSWindowDelegate
+
+extension CompletionWindowController: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        removeKeyboardMonitoring()
+        removeClickMonitoring()
     }
 }
