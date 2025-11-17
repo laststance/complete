@@ -33,6 +33,10 @@ class CompletionWindowController: NSWindowController {
     /// Current window position preference (top or bottom of cursor)
     var positionPreference: WindowPosition = .bottom
 
+    /// Reference to the app that was active before we showed the popup
+    /// Used to restore focus when inserting text
+    private var previouslyActiveApp: NSRunningApplication?
+
     // MARK: - Initialization
 
     private init() {
@@ -142,6 +146,11 @@ class CompletionWindowController: NSWindowController {
             hide()
             return
         }
+
+        // Save reference to currently active app (TextEdit, CotEditor, etc.)
+        // We'll need to restore focus to this app when inserting text
+        previouslyActiveApp = NSWorkspace.shared.frontmostApplication
+        print("💾 Saved previously active app: \(previouslyActiveApp?.localizedName ?? "unknown")")
 
         // Update view model
         viewModel.completions = completions
@@ -455,23 +464,50 @@ class CompletionWindowController: NSWindowController {
 
         print("📝 Starting text insertion: '\(selectedText)'")
         isInsertingText = true
-        
-        // SYNCHRONOUS insertion - completes before window lifecycle events
-        let success = AccessibilityManager.shared.insertCompletion(
-            selectedText, 
-            replacing: context
-        )
-        
-        isInsertingText = false
 
-        if success {
-            print("✅ Inserted completion: '\(selectedText)'")
-        } else {
-            print("❌ Failed to insert completion")
+        // Restore focus to the previously active app (TextEdit, CotEditor, etc.)
+        // This is critical: NSApp.activate() in show() makes Complete active,
+        // but we need to restore focus to the original app before inserting text
+        guard let targetApp = previouslyActiveApp else {
+            print("❌ No previously active app saved - cannot insert text")
+            self.isInsertingText = false
+            self.hide()
+            return
         }
 
-        // Hide window after successful insertion
-        hide()
+        print("🔄 Restoring focus to: \(targetApp.localizedName ?? "unknown")")
+
+        // Explicitly activate the target app
+        targetApp.activate(options: .activateIgnoringOtherApps)
+
+        // Wait for the app to become active and for focus to stabilize
+        // macOS needs time for app activation and focus transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+
+            // Verify the target app is now active
+            if targetApp.isActive {
+                print("✅ Target app is active, inserting text...")
+            } else {
+                print("⚠️  Target app not yet active, proceeding anyway...")
+            }
+
+            let success = AccessibilityManager.shared.insertCompletion(
+                selectedText,
+                replacing: context
+            )
+
+            self.isInsertingText = false
+
+            if success {
+                print("✅ Inserted completion: '\(selectedText)'")
+            } else {
+                print("❌ Failed to insert completion")
+            }
+
+            // Hide window after insertion attempt
+            self.hide()
+        }
     }
 
     /// Handle mouse click selection
