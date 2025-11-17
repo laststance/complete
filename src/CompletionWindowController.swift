@@ -111,6 +111,12 @@ class CompletionWindowController: NSWindowController {
     // MARK: - Notification Handlers
 
     @objc func windowDidResignKey(_ notification: Notification) {
+        // Don't hide if we're in the middle of inserting text
+        guard !isInsertingText else {
+            print("⏳ Deferring hide - text insertion in progress")
+            return
+        }
+        
         // Hide popup when window loses key status
         print("ℹ️  Window resigned key status - hiding popup")
         hide()
@@ -383,6 +389,9 @@ class CompletionWindowController: NSWindowController {
     // MARK: - Keyboard Monitoring
 
     private var keyboardMonitor: Any?
+    
+    /// Flag to track if text insertion is in progress
+    private var isInsertingText = false
 
     /// Set up global keyboard event monitoring
     private func setupKeyboardMonitoring() {
@@ -444,19 +453,25 @@ class CompletionWindowController: NSWindowController {
             return
         }
 
-        // Insert selected completion
-        Task { @MainActor in
-            let success = AccessibilityManager.shared.insertCompletion(selectedText, replacing: context)
+        print("📝 Starting text insertion: '\(selectedText)'")
+        isInsertingText = true
+        
+        // SYNCHRONOUS insertion - completes before window lifecycle events
+        let success = AccessibilityManager.shared.insertCompletion(
+            selectedText, 
+            replacing: context
+        )
+        
+        isInsertingText = false
 
-            if success {
-                print("✅ Inserted completion: '\(selectedText)'")
-            } else {
-                print("❌ Failed to insert completion")
-            }
-
-            // Hide window after insertion
-            hide()
+        if success {
+            print("✅ Inserted completion: '\(selectedText)'")
+        } else {
+            print("❌ Failed to insert completion")
         }
+
+        // Hide window after successful insertion
+        hide()
     }
 
     /// Handle mouse click selection
