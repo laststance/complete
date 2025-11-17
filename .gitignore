@@ -73,3 +73,6 @@ dist/
 *.dmg
 *.zip
 Complete-*.dmg
+
+# Local installation artifacts
+Complete.app/

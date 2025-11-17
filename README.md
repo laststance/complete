@@ -20,35 +20,69 @@ System-wide spell autocomplete for macOS triggered by global hotkey (Ctrl+I).
 - ✅ Comprehensive test suite (67 tests, >80% coverage)
 - ✅ Distribution-ready with notarization workflow
 
+## Installation
+
+### Quick Install (Recommended)
+
+Install Complete.app to `/Applications` with a single command:
+
+```bash
+./install-local.sh
+```
+
+This will:
+1. Build the app in release mode
+2. Create Complete.app bundle
+3. Install to /Applications
+4. Remove quarantine attributes
+
+**Options**:
+```bash
+./install-local.sh --debug         # Build in debug mode
+./install-local.sh --no-install    # Create .app without installing
+./install-local.sh --help          # Show help
+```
+
+### Manual Installation
+
+If you prefer manual installation:
+
+```bash
+# 1. Build release version
+swift build -c release
+
+# 2. Create app bundle
+mkdir -p Complete.app/Contents/MacOS
+mkdir -p Complete.app/Contents/Resources
+cp .build/release/Complete Complete.app/Contents/MacOS/
+cp src/Resources/Info.plist Complete.app/Contents/
+chmod +x Complete.app/Contents/MacOS/Complete
+
+# 3. Install to Applications
+cp -R Complete.app /Applications/
+```
+
+### Running from Terminal (Development)
+
+For development and testing without installation:
+
+```bash
+# Build and run
+swift run
+
+# Run tests
+swift test
+
+# Build for release
+swift build -c release
+```
+
 ## Build Instructions
 
 ### Prerequisites
 - macOS 14.0 (Sonoma) or later
 - Xcode 15.0 or later
 - Swift 5.9 or later
-
-### Building with Swift Package Manager
-
-```bash
-# Build the project
-swift build
-
-# Run the application
-swift run
-
-# Build for release
-swift build -c release
-```
-
-### Building with Xcode
-
-```bash
-# Generate Xcode project
-swift package generate-xcodeproj
-
-# Open in Xcode
-open Complete.xcodeproj
-```
 
 ## Project Structure
 
@@ -57,6 +91,7 @@ complete/
 ├── Package.swift                      # Swift Package Manager configuration
 ├── Package.resolved                   # Dependency lock file
 ├── Complete.entitlements              # Accessibility permissions
+├── install-local.sh                   # Local installation script
 ├── notarize.sh                        # Distribution automation script
 ├── CLAUDE.md                          # Claude Code guidance
 ├── src/                               # Source code (12 files, ~3,500 lines)
