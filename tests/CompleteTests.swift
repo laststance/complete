@@ -35,21 +35,6 @@ final class CompleteTests: XCTestCase {
         XCTAssertTrue(instance1 === instance2, "SettingsManager should be a singleton")
     }
 
-    func testSettingsManager_WindowPositionDefault() {
-        let position = SettingsManager.shared.windowPosition
-        XCTAssertEqual(position, .bottom, "Default window position should be bottom")
-    }
-
-    func testSettingsManager_WindowPositionPersistence() {
-        // Set to top
-        SettingsManager.shared.windowPosition = .top
-        XCTAssertEqual(SettingsManager.shared.windowPosition, .top)
-
-        // Set back to bottom
-        SettingsManager.shared.windowPosition = .bottom
-        XCTAssertEqual(SettingsManager.shared.windowPosition, .bottom)
-    }
-
     func testSettingsManager_LaunchAtLoginDefault() {
         let launchAtLogin = SettingsManager.shared.launchAtLogin
         XCTAssertFalse(launchAtLogin, "Default launch at login should be false")
@@ -67,34 +52,29 @@ final class CompleteTests: XCTestCase {
 
     func testSettingsManager_ResetToDefaults() {
         // Change settings
-        SettingsManager.shared.windowPosition = .top
         SettingsManager.shared.launchAtLogin = true
 
         // Reset
         SettingsManager.shared.resetToDefaults()
 
         // Verify defaults restored
-        XCTAssertEqual(SettingsManager.shared.windowPosition, .bottom)
         XCTAssertFalse(SettingsManager.shared.launchAtLogin)
     }
 
     func testSettingsManager_ExportSettings() {
         // Set some values
-        SettingsManager.shared.windowPosition = .top
         SettingsManager.shared.launchAtLogin = true
 
         // Export
         let exported = SettingsManager.shared.exportSettings()
 
         // Verify exported dictionary contains values
-        XCTAssertNotNil(exported["windowPosition"])
         XCTAssertNotNil(exported["launchAtLogin"])
     }
 
     func testSettingsManager_ImportSettings() {
         // Create settings dict
         let settings: [String: Any] = [
-            "windowPosition": "bottom",
             "launchAtLogin": true
         ]
 
@@ -110,9 +90,6 @@ final class CompleteTests: XCTestCase {
     }
 
     func testSettingsManager_RestoreSettings() {
-        // Set some values
-        SettingsManager.shared.windowPosition = .top
-
         // Restore should reload from UserDefaults
         SettingsManager.shared.restoreSettings()
 
@@ -428,26 +405,6 @@ final class CompleteTests: XCTestCase {
         XCTAssertEqual(context.selectedText, "world")
     }
 
-    // MARK: - WindowPosition Tests
-
-    func testWindowPosition_RawValues() {
-        XCTAssertEqual(WindowPosition.top.rawValue, "top")
-        XCTAssertEqual(WindowPosition.bottom.rawValue, "bottom")
-    }
-
-    func testWindowPosition_InitFromRawValue() {
-        let top = WindowPosition(rawValue: "top")
-        let bottom = WindowPosition(rawValue: "bottom")
-
-        XCTAssertEqual(top, .top)
-        XCTAssertEqual(bottom, .bottom)
-    }
-
-    func testWindowPosition_InvalidRawValue() {
-        let invalid = WindowPosition(rawValue: "invalid")
-        XCTAssertNil(invalid, "Invalid raw value should return nil")
-    }
-
     // MARK: - Integration Tests
 
     func testIntegration_CompletionEngineWithCache() async {
@@ -472,7 +429,6 @@ final class CompleteTests: XCTestCase {
 
     func testIntegration_SettingsManagerPersistence() {
         // Change multiple settings
-        SettingsManager.shared.windowPosition = .top
         SettingsManager.shared.launchAtLogin = true
 
         // Export settings
@@ -480,7 +436,6 @@ final class CompleteTests: XCTestCase {
 
         // Reset to defaults
         SettingsManager.shared.resetToDefaults()
-        XCTAssertEqual(SettingsManager.shared.windowPosition, .bottom)
         XCTAssertFalse(SettingsManager.shared.launchAtLogin)
 
         // Import settings back
@@ -554,7 +509,6 @@ final class CompleteTests: XCTestCase {
         options.iterationCount = 10
         
         measure(metrics: [XCTClockMetric()], options: options) {
-            _ = SettingsManager.shared.windowPosition
             _ = SettingsManager.shared.launchAtLogin
         }
     }
@@ -562,10 +516,10 @@ final class CompleteTests: XCTestCase {
     func testPerformance_SettingsPersistence() {
         let options = XCTMeasureOptions()
         options.iterationCount = 5
-        
+
         measure(metrics: [XCTClockMetric()], options: options) {
-            SettingsManager.shared.windowPosition = .top
-            SettingsManager.shared.windowPosition = .bottom
+            SettingsManager.shared.launchAtLogin = true
+            SettingsManager.shared.launchAtLogin = false
         }
     }
     
@@ -589,14 +543,14 @@ final class CompleteTests: XCTestCase {
     func testMemoryLeaks_SettingsManager() {
         // Singletons should persist, verify no leaks through repeated operations
         let manager = SettingsManager.shared
-        
+
         // Exercise settings extensively
         for _ in 0..<100 {
-            manager.windowPosition = .top
-            manager.windowPosition = .bottom
-            _ = manager.windowPosition
+            manager.launchAtLogin = true
+            manager.launchAtLogin = false
+            _ = manager.launchAtLogin
         }
-        
+
         // Verify singleton is same instance
         XCTAssertTrue(manager === SettingsManager.shared, "Should be same singleton instance")
     }
@@ -636,9 +590,9 @@ final class CompleteTests: XCTestCase {
         
         measure(metrics: [XCTMemoryMetric()], options: options) {
             for _ in 0..<1000 {
-                _ = SettingsManager.shared.windowPosition
-                SettingsManager.shared.windowPosition = .top
-                SettingsManager.shared.windowPosition = .bottom
+                _ = SettingsManager.shared.launchAtLogin
+                SettingsManager.shared.launchAtLogin = true
+                SettingsManager.shared.launchAtLogin = false
             }
         }
     }

@@ -1,12 +1,6 @@
 import Cocoa
 import SwiftUI
 
-/// Window position preference
-enum WindowPosition {
-    case top    // Above cursor
-    case bottom // Below cursor
-}
-
 /// Custom NSPanel subclass that can become key window to receive keyboard events
 class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool {
@@ -29,9 +23,6 @@ class CompletionWindowController: NSWindowController {
 
     /// Hosting controller for SwiftUI content
     private var hostingController: NSHostingController<CompletionListView>?
-
-    /// Current window position preference (top or bottom of cursor)
-    var positionPreference: WindowPosition = .bottom
 
     /// Reference to the app that was active before we showed the popup
     /// Used to restore focus when inserting text
@@ -277,27 +268,12 @@ class CompletionWindowController: NSWindowController {
         // Vertical offset from cursor (no horizontal offset - align directly like TextEdit)
         let offsetY: CGFloat = 20
 
-        // Calculate initial position based on preference
-        var origin: CGPoint
-
-        switch positionPreference {
-        case .bottom:
-            // Position below cursor, aligned directly underneath
-            origin = CGPoint(
-                x: point.x,
-                y: point.y - offsetY - windowSize.height
-            )
-            print("   Position preference: BELOW cursor")
-
-        case .top:
-            // Position above cursor, aligned directly
-            origin = CGPoint(
-                x: point.x,
-                y: point.y + offsetY
-            )
-            print("   Position preference: ABOVE cursor")
-        }
-        
+        // Always position above cursor for stable behavior
+        var origin = CGPoint(
+            x: point.x,
+            y: point.y + offsetY
+        )
+        print("   Position: ABOVE cursor")
         print("   Initial calculated origin: (\(origin.x), \(origin.y))")
 
         // Adjust horizontally if off-screen
@@ -322,18 +298,8 @@ class CompletionWindowController: NSWindowController {
             origin.x = clampedX
         }
 
-        // Adjust vertically if off-screen
-        if origin.y < visibleFrame.minY {
-            let oldY = origin.y
-            // Bottom edge: position above cursor instead
-            origin.y = point.y + offsetY
-            print("   ⚠️  Adjusted Y (off bottom edge): \(oldY) → \(origin.y) (flipped to above)")
-        } else if origin.y + windowSize.height > visibleFrame.maxY {
-            let oldY = origin.y
-            // Top edge: position below cursor instead
-            origin.y = point.y - offsetY - windowSize.height
-            print("   ⚠️  Adjusted Y (off top edge): \(oldY) → \(origin.y) (flipped to below)")
-        }
+        // No vertical flipping - just clamp to screen bounds if needed
+        // (Above cursor positioning is stable and rarely needs adjustment)
 
         // Clamp vertically to visible frame
         let clampedY = max(visibleFrame.minY + 10, min(origin.y, visibleFrame.maxY - windowSize.height - 10))
@@ -346,17 +312,6 @@ class CompletionWindowController: NSWindowController {
         print("   Window will cover: Y from \(origin.y) to \(origin.y + windowSize.height)")
 
         window.setFrameOrigin(origin)
-    }
-
-    /// Toggle window position preference between top and bottom
-    func togglePosition() {
-        positionPreference = (positionPreference == .bottom) ? .top : .bottom
-        print("ℹ️  Window position toggled to: \(positionPreference)")
-
-        // Reposition window if currently visible
-        if isVisible {
-            positionWindowAtCursor()
-        }
     }
 
     // MARK: - Click Monitoring

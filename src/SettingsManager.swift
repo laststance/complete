@@ -12,7 +12,6 @@ class SettingsManager {
     // MARK: - UserDefaults Keys
 
     private enum Keys {
-        static let windowPosition = "windowPosition"
         static let launchAtLogin = "launchAtLogin"
         // Note: Hotkey settings are managed by KeyboardShortcuts library
     }
@@ -33,29 +32,10 @@ class SettingsManager {
     /// Register default preference values
     private func registerDefaults() {
         let defaultValues: [String: Any] = [
-            Keys.windowPosition: WindowPosition.bottom.rawValue,
             Keys.launchAtLogin: false
         ]
 
         defaults.register(defaults: defaultValues)
-    }
-
-    // MARK: - Window Position
-
-    /// Get window position preference
-    var windowPosition: WindowPosition {
-        get {
-            let rawValue = defaults.string(forKey: Keys.windowPosition) ?? WindowPosition.bottom.rawValue
-            return WindowPosition(rawValue: rawValue) ?? .bottom
-        }
-        set {
-            defaults.set(newValue.rawValue, forKey: Keys.windowPosition)
-
-            // Update CompletionWindowController
-            CompletionWindowController.shared.positionPreference = newValue
-
-            print("✅ Window position preference saved: \(newValue)")
-        }
     }
 
     // MARK: - Launch at Login
@@ -113,10 +93,6 @@ class SettingsManager {
     func restoreSettings() {
         print("📋 Restoring saved settings...")
 
-        // Restore window position
-        CompletionWindowController.shared.positionPreference = windowPosition
-        print("   Window position: \(windowPosition)")
-
         // Restore launch at login status
         // (Already applied via property getter)
         print("   Launch at login: \(launchAtLogin)")
@@ -133,9 +109,6 @@ class SettingsManager {
     func resetToDefaults() {
         print("🔄 Resetting all settings to defaults...")
 
-        // Reset window position
-        windowPosition = .bottom
-
         // Reset launch at login
         launchAtLogin = false
 
@@ -151,7 +124,6 @@ class SettingsManager {
     /// Export settings as dictionary (for backup/sync)
     func exportSettings() -> [String: Any] {
         return [
-            Keys.windowPosition: windowPosition.rawValue,
             Keys.launchAtLogin: launchAtLogin
         ]
     }
@@ -159,41 +131,10 @@ class SettingsManager {
     /// Import settings from dictionary
     /// - Parameter settings: Settings dictionary to import
     func importSettings(_ settings: [String: Any]) {
-        if let positionRaw = settings[Keys.windowPosition] as? String,
-           let position = WindowPosition(rawValue: positionRaw) {
-            windowPosition = position
-        }
-
         if let launchAtLogin = settings[Keys.launchAtLogin] as? Bool {
             self.launchAtLogin = launchAtLogin
         }
 
         print("✅ Settings imported successfully")
-    }
-}
-
-// MARK: - WindowPosition Extension
-
-extension WindowPosition: RawRepresentable {
-    typealias RawValue = String
-
-    init?(rawValue: String) {
-        switch rawValue.lowercased() {
-        case "top":
-            self = .top
-        case "bottom":
-            self = .bottom
-        default:
-            return nil
-        }
-    }
-
-    var rawValue: String {
-        switch self {
-        case .top:
-            return "top"
-        case .bottom:
-            return "bottom"
-        }
     }
 }

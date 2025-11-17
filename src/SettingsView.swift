@@ -91,15 +91,7 @@ struct SettingsView: View {
 
     private var appearanceSettings: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Window Position:", selection: $settingsManager.windowPosition) {
-                Text("Below Cursor").tag(WindowPosition.bottom)
-                Text("Above Cursor").tag(WindowPosition.top)
-            }
-            .pickerStyle(.radioGroup)
-            .frame(width: formWidth - 40)
-            .help("Choose where the completion window appears relative to the cursor")
-
-            Text("The completion window will appear at the selected position relative to your cursor.")
+            Text("The completion window will appear above your cursor.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.leading, 8)
@@ -137,12 +129,6 @@ class SettingsManagerObservable: ObservableObject {
 
     static let shared = SettingsManagerObservable()
 
-    @Published var windowPosition: WindowPosition {
-        didSet {
-            SettingsManager.shared.windowPosition = windowPosition
-        }
-    }
-
     @Published var launchAtLogin: Bool {
         didSet {
             SettingsManager.shared.launchAtLogin = launchAtLogin
@@ -151,13 +137,11 @@ class SettingsManagerObservable: ObservableObject {
 
     private init() {
         // Initialize from SettingsManager
-        self.windowPosition = SettingsManager.shared.windowPosition
         self.launchAtLogin = SettingsManager.shared.launchAtLogin
     }
 
     /// Refresh values from SettingsManager (after reset)
     func refreshFromManager() {
-        windowPosition = SettingsManager.shared.windowPosition
         launchAtLogin = SettingsManager.shared.launchAtLogin
     }
 }
