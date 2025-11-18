@@ -56,15 +56,19 @@ class HotkeyManager {
         }
 
         // Phase 3: Extract text at cursor position
-        guard let textContext = AccessibilityManager.shared.extractTextContext() else {
-            print("⚠️  Could not extract text context from focused element")
+        let textContext: TextContext
+        switch AccessibilityManager.shared.extractTextContext() {
+        case .success(let context):
+            textContext = context
+        case .failure(let error):
+            print("⚠️  Could not extract text context: \(error.userFriendlyMessage)")
             showNoTextFeedback()
             return
         }
 
         print("📝 Text extracted successfully!")
         print("   Word at cursor: '\(textContext.wordAtCursor)'")
-        print("   Context: '\(textContext.textBeforeCursor.suffix(30))...'")
+        print("   Context: '\(textContext.textBeforeCursor.suffix(30))...")
 
         // Phase 4: Generate completion suggestions based on textContext
         let completions = CompletionEngine.shared.completions(for: textContext.wordAtCursor)
@@ -81,11 +85,14 @@ class HotkeyManager {
         }
 
         // Get cursor screen position for accurate window placement
-        let cursorPosition = AccessibilityManager.shared.getCursorScreenPosition()
-        if let position = cursorPosition {
+        let cursorPosition: CGPoint
+        switch AccessibilityManager.shared.getCursorScreenPosition() {
+        case .success(let position):
+            cursorPosition = position
             print("📍 Cursor position: (\(position.x), \(position.y))")
-        } else {
-            print("⚠️  Could not get cursor position, will use mouse location fallback")
+        case .failure(let error):
+            print("⚠️  Could not get cursor position: \(error.userFriendlyMessage), using mouse location fallback")
+            cursorPosition = NSEvent.mouseLocation
         }
 
         // Phase 5: Show completion window with suggestions at cursor position

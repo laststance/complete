@@ -15,11 +15,10 @@ class AccessibilityElementExtractor {
 
     /// Extract text context from currently focused UI element
     /// Performance target: <50ms (typical 10-25ms per research)
-    /// - Returns: TextContext if successful, nil otherwise
-    func extractTextContext() -> TextContext? {
+    /// - Returns: Result with TextContext or AccessibilityError
+    func extractTextContext() -> Result<TextContext, AccessibilityError> {
         guard permissionManager.checkPermissionStatus() else {
-            print("❌ Cannot extract text: Accessibility permissions not granted")
-            return nil
+            return .failure(.permissionDenied)
         }
 
         // Get system-wide accessibility element
@@ -33,21 +32,23 @@ class AccessibilityElementExtractor {
             print("⚠️  No focused element (likely web browser), trying element at cursor position...")
 
             // Get current cursor screen position
-            if let cursorPosition = getCursorScreenPosition() {
+            switch getCursorScreenPosition() {
+            case .success(let cursorPosition):
                 print("📍 Cursor position: (\(cursorPosition.x), \(cursorPosition.y))")
                 focusedElement = getElementAtPosition(cursorPosition)
 
                 if focusedElement != nil {
                     print("✅ Found element at cursor position (web browser support)")
                 } else {
-                    print("❌ Failed to get element at cursor position")
+                    return .failure(.elementNotFoundAtPosition(x: cursorPosition.x, y: cursorPosition.y))
                 }
+            case .failure(let error):
+                return .failure(error)
             }
         }
 
         guard let element = focusedElement else {
-            print("⚠️  No focused text element found")
-            return nil
+            return .failure(.noFocusedElement)
         }
 
         // Extract text components
@@ -79,7 +80,7 @@ class AccessibilityElementExtractor {
         print("   Cursor position: \(cursorPosition)")
         print("   Text before: '\(textBefore.suffix(20))'")
 
-        return context
+        return .success(context)
     }
 
     /// Get focused UI element from system-wide element
@@ -224,8 +225,8 @@ class AccessibilityElementExtractor {
 
     /// Get cursor screen coordinates for window positioning
     /// - Parameter element: Optional AX element to use (if nil, will try to get focused element)
-    /// - Returns: CGPoint with cursor screen position, or nil if unavailable
-    func getCursorScreenPosition(from element: AXUIElement? = nil) -> CGPoint? {
+    /// - Returns: Result with CGPoint or AccessibilityError
+    func getCursorScreenPosition(from element: AXUIElement? = nil) -> Result<CGPoint, AccessibilityError> {
         // Use provided element, or try to get focused element
         let focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
 
@@ -234,11 +235,10 @@ class AccessibilityElementExtractor {
             // Fallback to mouse cursor position for web browsers
             let mousePosition = NSEvent.mouseLocation
             print("📍 Using mouse position: (\(mousePosition.x), \(mousePosition.y))")
-            return mousePosition
+            return .success(mousePosition)
         }
 
         // Strategy 1: Get bounds for selected text range (most accurate)
-        // This gives us the actual cursor position within the text field
         if let selectedRangeValue = getAttributeValue(focusedElement, attribute: kAXSelectedTextRangeAttribute as CFString) {
             // Extract CFRange from AXValue
             let axValue = selectedRangeValue as! AXValue
@@ -251,8 +251,7 @@ class AccessibilityElementExtractor {
                 // Create AXValue for the range parameter
                 var mutableRange = range
                 guard let rangeAXValue = AXValueCreate(.cfRange, &mutableRange) else {
-                    print("⚠️  Could not create AXValue for range")
-                    return nil
+                    return .failure(.axApiFailed(attribute: "AXBoundsForRange", code: -1))
                 }
 
                 // Get bounds for this range
@@ -274,31 +273,19 @@ class AccessibilityElementExtractor {
                         print("📍 Cursor bounds rect: \(bounds)")
                         print("   - origin: (\(bounds.origin.x), \(bounds.origin.y))")
                         print("   - size: (\(bounds.width) × \(bounds.height))")
-                        print("   - minY: \(bounds.minY), maxY: \(bounds.maxY)")
 
-                        // Get screen info for coordinate system verification
-                        if let screen = NSScreen.main {
-                            print("   - Screen frame: \(screen.frame)")
-                            print("   - Screen has flipped coordinates: \(screen.frame.origin.y == 0)")
-                        }
-
-                        // CRITICAL: Accessibility API bounds use FLIPPED coordinates (top-left origin)
-                        // This is different from standard macOS screen coordinates (bottom-left origin)
-                        // bounds.origin.y is the TOP of the cursor in this flipped system
-                        // To position window BELOW cursor, we need bounds.maxY (bottom of cursor)
                         let cursorBottomY = bounds.maxY
                         let cursorX = bounds.origin.x
 
                         let cursorPosition = CGPoint(x: cursorX, y: cursorBottomY)
-                        print("📍 Cursor position (bottom of cursor for below placement): (\(cursorPosition.x), \(cursorPosition.y))")
-                        return cursorPosition
+                        print("📍 Cursor position (bottom of cursor): (\(cursorPosition.x), \(cursorPosition.y))")
+                        return .success(cursorPosition)
                     }
                 }
             }
         }
 
         // Strategy 2: Get element position as fallback
-        // This gives us the element's top-left corner, not ideal but better than nothing
         if let positionValue = getAttributeValue(focusedElement, attribute: kAXPositionAttribute as CFString) {
             let axValue = positionValue as! AXValue
             var point = CGPoint.zero
@@ -306,14 +293,14 @@ class AccessibilityElementExtractor {
 
             if success {
                 print("📍 Cursor position from element bounds: (\(point.x), \(point.y))")
-                print("⚠️  Using element position as fallback (may not be exact cursor position)")
-                return point
+                print("⚠️  Using element position as fallback")
+                return .success(point)
             }
         }
 
         // Strategy 3: Ultimate fallback to mouse cursor position
         let mousePosition = NSEvent.mouseLocation
         print("📍 Using mouse position as fallback: (\(mousePosition.x), \(mousePosition.y))")
-        return mousePosition
+        return .success(mousePosition)
     }
 }
