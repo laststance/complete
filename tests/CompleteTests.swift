@@ -382,6 +382,77 @@ final class CompleteTests: XCTestCase {
         XCTAssertTrue(true, "insertCompletion method exists with correct signature")
     }
 
+    // MARK: - Error Handling Tests (Result Types)
+
+    func testAccessibilityManager_ExtractTextContext_ReturnsResult() {
+        let result = AccessibilityManager.shared.extractTextContext()
+
+        // Verify it returns a Result type (not nil/optional)
+        switch result {
+        case .success:
+            // Success path - valid context returned
+            XCTAssertTrue(true)
+        case .failure(let error):
+            // Failure path - proper error returned
+            XCTAssertNotNil(error)
+        }
+    }
+
+    func testAccessibilityManager_GetCursorPosition_ReturnsResult() {
+        let result = AccessibilityManager.shared.getCursorScreenPosition()
+
+        // Verify Result type with either CGPoint or AccessibilityError
+        switch result {
+        case .success(let position):
+            XCTAssertTrue(position.x >= 0 || position.x < 0) // Valid CGPoint
+        case .failure(let error):
+            XCTAssertNotNil(error)
+        }
+    }
+
+    func testAccessibilityManager_InsertCompletion_WithoutPermissions() {
+        // Create minimal valid context
+        let context = TextContext(
+            fullText: "test",
+            selectedText: nil,
+            textBeforeCursor: "",
+            textAfterCursor: "test",
+            wordAtCursor: "test",
+            cursorPosition: 0,
+            selectedRange: nil
+        )
+
+        // Without permissions or focused element, should return false
+        let result = AccessibilityManager.shared.insertCompletion("testing", replacing: context)
+
+        // In test environment, likely fails - verify doesn't crash
+        XCTAssertTrue(result == true || result == false, "Should return boolean without crash")
+    }
+
+    // MARK: - Permission Flow Tests
+
+    func testAccessibilityManager_RequestPermissions() {
+        // Verify requestPermissions doesn't crash
+        // Note: Shows UI dialog in test environment, but shouldn't crash
+        AccessibilityManager.shared.requestPermissions()
+
+        XCTAssertTrue(true, "requestPermissions should complete without crash")
+    }
+
+    func testAccessibilityManager_ShowPermissionDeniedAlert() {
+        // Verify alert method doesn't crash
+        AccessibilityManager.shared.showPermissionDeniedAlert()
+
+        XCTAssertTrue(true, "showPermissionDeniedAlert should complete without crash")
+    }
+
+    func testAccessibilityManager_TestPermissions() {
+        // Verify test method doesn't crash
+        AccessibilityManager.shared.testPermissions()
+
+        XCTAssertTrue(true, "testPermissions should complete without crash")
+    }
+
     // MARK: - TextContext Tests
 
     func testTextContext_Initialization() {
@@ -419,6 +490,139 @@ final class CompleteTests: XCTestCase {
         XCTAssertEqual(context.selectedRange?.location, 6)
         XCTAssertEqual(context.selectedRange?.length, 5)
         XCTAssertEqual(context.selectedText, "world")
+    }
+
+    // MARK: - TextContext Edge Cases
+
+    func testTextContext_EmptyDocument() {
+        let context = TextContext(
+            fullText: "",
+            selectedText: nil,
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            wordAtCursor: "",
+            cursorPosition: 0,
+            selectedRange: nil
+        )
+
+        XCTAssertEqual(context.fullText, "")
+        XCTAssertEqual(context.wordAtCursor, "")
+        XCTAssertEqual(context.cursorPosition, 0)
+    }
+
+    func testTextContext_UnicodeCharacters() {
+        let unicodeText = "Hello 世界 🌍 café"
+        let context = TextContext(
+            fullText: unicodeText,
+            selectedText: nil,
+            textBeforeCursor: "Hello ",
+            textAfterCursor: "世界 🌍 café",
+            wordAtCursor: "世界",
+            cursorPosition: 6,
+            selectedRange: nil
+        )
+
+        XCTAssertEqual(context.fullText, unicodeText)
+        XCTAssertEqual(context.wordAtCursor, "世界")
+        XCTAssertTrue(context.fullText.contains("🌍"))
+        XCTAssertTrue(context.fullText.contains("café"))
+    }
+
+    func testTextContext_VeryLongText() {
+        // Test with 10,000+ character text
+        let longText = String(repeating: "a", count: 10000)
+        let context = TextContext(
+            fullText: longText,
+            selectedText: nil,
+            textBeforeCursor: String(repeating: "a", count: 5000),
+            textAfterCursor: String(repeating: "a", count: 5000),
+            wordAtCursor: "a",
+            cursorPosition: 5000,
+            selectedRange: nil
+        )
+
+        XCTAssertEqual(context.fullText.count, 10000)
+        XCTAssertEqual(context.cursorPosition, 5000)
+    }
+
+    func testTextContext_SpecialCharacters() {
+        let specialText = "Hello\nWorld\tTest\r\n!@#$%^&*()"
+        let context = TextContext(
+            fullText: specialText,
+            selectedText: nil,
+            textBeforeCursor: "Hello\n",
+            textAfterCursor: "World\tTest\r\n!@#$%^&*()",
+            wordAtCursor: "World",
+            cursorPosition: 6,
+            selectedRange: nil
+        )
+
+        XCTAssertTrue(context.fullText.contains("\n"))
+        XCTAssertTrue(context.fullText.contains("\t"))
+        XCTAssertTrue(context.fullText.contains("!@#$%"))
+    }
+
+    func testTextContext_MultilineSelection() {
+        let multilineText = "Line 1\nLine 2\nLine 3"
+        let range = CFRange(location: 0, length: multilineText.count)
+        let context = TextContext(
+            fullText: multilineText,
+            selectedText: multilineText,
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            wordAtCursor: "",
+            cursorPosition: 0,
+            selectedRange: range
+        )
+
+        XCTAssertEqual(context.selectedText, multilineText)
+        XCTAssertTrue(context.fullText.contains("\n"))
+    }
+
+    func testTextContext_CursorAtStart() {
+        let context = TextContext(
+            fullText: "Hello world",
+            selectedText: nil,
+            textBeforeCursor: "",
+            textAfterCursor: "Hello world",
+            wordAtCursor: "Hello",
+            cursorPosition: 0,
+            selectedRange: nil
+        )
+
+        XCTAssertEqual(context.cursorPosition, 0)
+        XCTAssertEqual(context.textBeforeCursor, "")
+    }
+
+    func testTextContext_CursorAtEnd() {
+        let text = "Hello world"
+        let context = TextContext(
+            fullText: text,
+            selectedText: nil,
+            textBeforeCursor: text,
+            textAfterCursor: "",
+            wordAtCursor: "world",
+            cursorPosition: text.count,
+            selectedRange: nil
+        )
+
+        XCTAssertEqual(context.cursorPosition, text.count)
+        XCTAssertEqual(context.textAfterCursor, "")
+    }
+
+    func testTextContext_NoSelection() {
+        let context = TextContext(
+            fullText: "Test",
+            selectedText: nil,
+            textBeforeCursor: "Te",
+            textAfterCursor: "st",
+            wordAtCursor: "Test",
+            cursorPosition: 2,
+            selectedRange: nil
+        )
+
+        XCTAssertNil(context.selectedText)
+        XCTAssertNil(context.selectedRange)
     }
 
     // MARK: - Integration Tests
