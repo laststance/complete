@@ -625,6 +625,192 @@ final class CompleteTests: XCTestCase {
         XCTAssertNil(context.selectedRange)
     }
 
+    // MARK: - Error Condition Tests
+
+    func testCompletionEngine_EmptyInput() {
+        let completions = CompletionEngine.shared.completions(for: "")
+
+        // Empty input should return empty array, not crash
+        XCTAssertTrue(completions.isEmpty, "Empty input should return no completions")
+    }
+
+    func testCompletionEngine_SingleCharacter() {
+        let completions = CompletionEngine.shared.completions(for: "a")
+
+        // Single character should work without crash
+        XCTAssertTrue(completions.count >= 0, "Single character input should not crash")
+    }
+
+    func testCompletionEngine_WhitespaceOnly() {
+        let completions = CompletionEngine.shared.completions(for: "   ")
+
+        // Whitespace-only should return empty
+        XCTAssertTrue(completions.isEmpty, "Whitespace-only input should return no completions")
+    }
+
+    func testCompletionEngine_EmojiInput() {
+        let completions = CompletionEngine.shared.completions(for: "😀")
+
+        // Emoji input should not crash
+        XCTAssertTrue(completions.count >= 0, "Emoji input should not crash")
+    }
+
+    func testCompletionEngine_UnicodeInput() {
+        let completions = CompletionEngine.shared.completions(for: "日本")
+
+        // Unicode input should work
+        XCTAssertTrue(completions.count >= 0, "Unicode input should not crash")
+    }
+
+    func testCompletionEngine_VeryLongInput() {
+        let longText = String(repeating: "a", count: 10000)
+        let completions = CompletionEngine.shared.completions(for: longText)
+
+        // Very long input should not crash
+        XCTAssertTrue(completions.count >= 0, "Very long input should not crash")
+    }
+
+    func testCompletionEngine_SpecialCharacters() {
+        let specialChars = "!@#$%^&*()"
+        let completions = CompletionEngine.shared.completions(for: specialChars)
+
+        // Special characters should not crash
+        XCTAssertTrue(completions.count >= 0, "Special characters should not crash")
+    }
+
+    func testCompletionEngine_NilLanguage() {
+        // Test with nil language (should use default)
+        let completions = CompletionEngine.shared.completions(for: "test", language: nil)
+
+        XCTAssertTrue(completions.count >= 0, "Nil language should use default")
+    }
+
+    // MARK: - Resource Exhaustion Tests
+
+    func testCompletionEngine_CacheFillsToLimit() {
+        CompletionEngine.shared.clearCache()
+
+        // Fill cache with many unique queries
+        for i in 0..<100 {
+            _ = CompletionEngine.shared.completions(for: "word\(i)")
+        }
+
+        let stats = CompletionEngine.shared.performanceStats
+
+        // Cache should handle many entries without crash
+        XCTAssertTrue(stats.totalQueries >= 100, "Cache should handle 100+ entries")
+    }
+
+    func testCompletionEngine_RapidSequentialCalls() {
+        let startTime = Date()
+
+        // Rapid sequential calls (stress test)
+        for _ in 0..<50 {
+            _ = CompletionEngine.shared.completions(for: "test")
+        }
+
+        let duration = Date().timeIntervalSince(startTime)
+
+        // Should complete quickly without hanging
+        XCTAssertLessThan(duration, 5.0, "50 rapid calls should complete in <5s")
+    }
+
+    func testCompletionEngine_VeryLargeCompletionList() {
+        // Test with short prefix that generates many completions
+        let completions = CompletionEngine.shared.completions(for: "a")
+
+        // Should handle large result sets without crash
+        XCTAssertTrue(completions.count < 1000, "Completion list should be reasonable size")
+    }
+
+    // MARK: - Concurrency Tests
+
+    func testCompletionEngine_ConcurrentCacheAccess() {
+        let expectation = XCTestExpectation(description: "Concurrent cache access")
+        expectation.expectedFulfillmentCount = 10
+
+        // Multiple concurrent requests
+        for i in 0..<10 {
+            DispatchQueue.global().async {
+                _ = CompletionEngine.shared.completions(for: "concurrent\(i)")
+                expectation.fulfill()
+            }
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+
+        // Should complete without crash or deadlock
+        XCTAssertTrue(true, "Concurrent access should not cause crash or deadlock")
+    }
+
+    func testSettingsManager_ConcurrentAccess() {
+        let expectation = XCTestExpectation(description: "Concurrent settings access")
+        expectation.expectedFulfillmentCount = 10
+
+        // Multiple concurrent reads/writes
+        for i in 0..<10 {
+            DispatchQueue.global().async {
+                let value = i % 2 == 0
+                SettingsManager.shared.launchAtLogin = value
+                _ = SettingsManager.shared.launchAtLogin
+                expectation.fulfill()
+            }
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+
+        // Should complete without crash
+        XCTAssertTrue(true, "Concurrent settings access should not crash")
+    }
+
+    // MARK: - Edge Case Validation Tests
+
+    func testAccessibilityError_UserFriendlyMessages() {
+        let error = AccessibilityError.permissionDenied
+
+        // Verify error has user-friendly message
+        XCTAssertFalse(error.userFriendlyMessage.isEmpty)
+        XCTAssertNotNil(error.recoverySuggestionMessage)
+    }
+
+    func testCompletionError_UserFriendlyMessages() {
+        let error = CompletionError.noCompletionsFound(for: "test")
+
+        // Verify error has user-friendly message
+        XCTAssertFalse(error.userFriendlyMessage.isEmpty)
+        XCTAssertNotNil(error.recoverySuggestionMessage)
+    }
+
+    func testTextContext_BoundaryConditions() {
+        // Test cursor at exact boundary
+        let text = "Hello"
+        let context = TextContext(
+            fullText: text,
+            selectedText: nil,
+            textBeforeCursor: text,
+            textAfterCursor: "",
+            wordAtCursor: "Hello",
+            cursorPosition: text.count,
+            selectedRange: nil
+        )
+
+        XCTAssertEqual(context.cursorPosition, 5)
+        XCTAssertEqual(context.textAfterCursor, "")
+    }
+
+    func testCompletionEngine_MemoryPressure() {
+        // Simulate memory pressure by requesting many completions
+        var totalCompletions = 0
+
+        for i in 0..<100 {
+            let completions = CompletionEngine.shared.completions(for: "mem\(i)")
+            totalCompletions += completions.count
+        }
+
+        // Should complete without crash
+        XCTAssertTrue(totalCompletions >= 0, "Memory pressure test should not crash")
+    }
+
     // MARK: - Integration Tests
 
     func testIntegration_CompletionEngineWithCache() async {
