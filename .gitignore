@@ -76,3 +76,9 @@ Complete-*.dmg
 
 # Local installation artifacts
 Complete.app/
+
+# Manual test scripts (debug/development only)
+manual-tests/
+
+# direnv configuration
+.envrc
