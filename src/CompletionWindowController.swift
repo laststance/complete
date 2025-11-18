@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import os.log
 
 /// Custom NSPanel subclass that can become key window to receive keyboard events
 class KeyablePanel: NSPanel {
@@ -108,18 +109,18 @@ class CompletionWindowController: NSWindowController {
     @objc func windowDidResignKey(_ notification: Notification) {
         // Don't hide if we're in the middle of inserting text
         guard !isInsertingText else {
-            print("⏳ Deferring hide - text insertion in progress")
+            os_log("⏳ Deferring hide - text insertion in progress", log: .ui, type: .debug)
             return
         }
         
         // Hide popup when window loses key status
-        print("ℹ️  Window resigned key status - hiding popup")
+        os_log("ℹ️  Window resigned key status - hiding popup", log: .ui, type: .info)
         hide()
     }
 
     @objc private func activeSpaceDidChange(_ notification: Notification) {
         // Hide popup when user switches spaces/desktops
-        print("ℹ️  Active space changed - hiding popup")
+        os_log("ℹ️  Active space changed - hiding popup", log: .ui, type: .info)
         hide()
     }
 
@@ -141,7 +142,7 @@ class CompletionWindowController: NSWindowController {
         // Save reference to currently active app (TextEdit, CotEditor, etc.)
         // We'll need to restore focus to this app when inserting text
         previouslyActiveApp = NSWorkspace.shared.frontmostApplication
-        print("💾 Saved previously active app: \(previouslyActiveApp?.localizedName ?? "unknown")")
+        os_log("💾 Saved previously active app: %{public}@", log: .ui, type: .info, previouslyActiveApp?.localizedName ?? "unknown")
 
         // Update view model
         viewModel.completions = completions
@@ -175,17 +176,17 @@ class CompletionWindowController: NSWindowController {
         }
 
         // Activate app to receive keyboard events (required for LSUIElement background agents)
-        print("🎯 Activating app for keyboard focus")
+        os_log("🎯 Activating app for keyboard focus", log: .ui, type: .info)
         NSApp.activate(ignoringOtherApps: true)
-        print("🎯 App activated: \(NSApp.isActive)")
+        os_log("🎯 App activated: %{public}@", log: .ui, type: .info, NSApp.isActive ? "true" : "false")
 
         // Show window and establish keyboard focus
         window?.makeKeyAndOrderFront(nil)
-        print("🎯 Window is key: \(window?.isKeyWindow ?? false)")
+        os_log("🎯 Window is key: %{public}@", log: .ui, type: .info, window?.isKeyWindow ?? false ? "true" : "false")
 
         // Ensure window accepts keyboard input
         window?.makeFirstResponder(window?.contentView)
-        print("🎯 First responder set: \(window?.firstResponder != nil)")
+        os_log("🎯 First responder set: %{public}@", log: .ui, type: .info, window?.firstResponder != nil ? "true" : "false")
 
         // Set up keyboard monitoring
         setupKeyboardMonitoring()
@@ -250,8 +251,8 @@ class CompletionWindowController: NSWindowController {
     ///   - window: The window to position
     ///   - point: Screen coordinates to position relative to
     private func calculatePosition(for window: NSWindow, relativeTo point: CGPoint) {
-        print("\n🎯 POSITIONING WINDOW")
-        print("   Input point (cursor position): (\(point.x), \(point.y))")
+        os_log("\n🎯 POSITIONING WINDOW", log: .ui, type: .info)
+        os_log("   Input point (cursor position): (%{public}f, %{public}f)", log: .ui, type: .info, point.x, point.y)
         
         // Find the screen containing the point (multi-monitor support)
         let screen = NSScreen.screens.first { screen in
@@ -261,9 +262,9 @@ class CompletionWindowController: NSWindowController {
         let visibleFrame = screen.visibleFrame
         let windowSize = window.frame.size
         
-        print("   Screen frame: \(screen.frame)")
-        print("   Screen visible frame: \(visibleFrame)")
-        print("   Window size: \(windowSize)")
+        os_log("   Screen frame: %{public}@", log: .ui, type: .info, String(describing: screen.frame))
+        os_log("   Screen visible frame: %{public}@", log: .ui, type: .info, String(describing: visibleFrame))
+        os_log("   Window size: %{public}@", log: .ui, type: .info, String(describing: windowSize))
 
         // Vertical offset from cursor (no horizontal offset - align directly like TextEdit)
         let offsetY: CGFloat = 20
@@ -273,28 +274,28 @@ class CompletionWindowController: NSWindowController {
             x: point.x,
             y: point.y + offsetY
         )
-        print("   Position: ABOVE cursor")
-        print("   Initial calculated origin: (\(origin.x), \(origin.y))")
+        os_log("   Position: ABOVE cursor", log: .ui, type: .info)
+        os_log("   Initial calculated origin: (%{public}f, %{public}f)", log: .ui, type: .info, origin.x, origin.y)
 
         // Adjust horizontally if off-screen
         if origin.x + windowSize.width > visibleFrame.maxX {
             let oldX = origin.x
             // Shift left to keep on screen
             origin.x = visibleFrame.maxX - windowSize.width - 10
-            print("   ⚠️  Adjusted X (off right edge): \(oldX) → \(origin.x)")
+            os_log("   ⚠️  Adjusted X (off right edge): %{public}f → %{public}f", log: .ui, type: .info, oldX, origin.x)
         }
 
         // Ensure not off left edge
         if origin.x < visibleFrame.minX {
             let oldX = origin.x
             origin.x = visibleFrame.minX + 10
-            print("   ⚠️  Adjusted X (off left edge): \(oldX) → \(origin.x)")
+            os_log("   ⚠️  Adjusted X (off left edge): %{public}f → %{public}f", log: .ui, type: .info, oldX, origin.x)
         }
 
         // Clamp horizontally to visible frame
         let clampedX = max(visibleFrame.minX + 10, min(origin.x, visibleFrame.maxX - windowSize.width - 10))
         if clampedX != origin.x {
-            print("   ⚠️  Clamped X: \(origin.x) → \(clampedX)")
+            os_log("   ⚠️  Clamped X: %{public}f → %{public}f", log: .ui, type: .info, origin.x, clampedX)
             origin.x = clampedX
         }
 
@@ -304,12 +305,12 @@ class CompletionWindowController: NSWindowController {
         // Clamp vertically to visible frame
         let clampedY = max(visibleFrame.minY + 10, min(origin.y, visibleFrame.maxY - windowSize.height - 10))
         if clampedY != origin.y {
-            print("   ⚠️  Clamped Y: \(origin.y) → \(clampedY)")
+            os_log("   ⚠️  Clamped Y: %{public}f → %{public}f", log: .ui, type: .info, origin.y, clampedY)
             origin.y = clampedY
         }
         
-        print("   FINAL window origin: (\(origin.x), \(origin.y))")
-        print("   Window will cover: Y from \(origin.y) to \(origin.y + windowSize.height)")
+        os_log("   FINAL window origin: (%{public}f, %{public}f)", log: .ui, type: .info, origin.x, origin.y)
+        os_log("   Window will cover: Y from %{public}f to %{public}f", log: .ui, type: .info, origin.y, origin.y + windowSize.height)
 
         window.setFrameOrigin(origin)
     }
@@ -335,7 +336,7 @@ class CompletionWindowController: NSWindowController {
                 )
                 
                 if !windowFrame.contains(screenClickLocation) {
-                    print("ℹ️  Click outside popup detected - hiding")
+                    os_log("ℹ️  Click outside popup detected - hiding", log: .ui, type: .info)
                     self.hide()
                 }
             }
@@ -417,20 +418,20 @@ class CompletionWindowController: NSWindowController {
             return
         }
 
-        print("📝 Starting text insertion: '\(selectedText)'")
+        os_log("📝 Starting text insertion: '%{private}@'", log: .ui, type: .info, selectedText)
         isInsertingText = true
 
         // Restore focus to the previously active app (TextEdit, CotEditor, etc.)
         // This is critical: NSApp.activate() in show() makes Complete active,
         // but we need to restore focus to the original app before inserting text
         guard let targetApp = previouslyActiveApp else {
-            print("❌ No previously active app saved - cannot insert text")
+            os_log("❌ No previously active app saved - cannot insert text", log: .ui, type: .error)
             self.isInsertingText = false
             self.hide()
             return
         }
 
-        print("🔄 Restoring focus to: \(targetApp.localizedName ?? "unknown")")
+        os_log("🔄 Restoring focus to: \(targetApp.localizedName ?? "unknown")")
 
         // Explicitly activate the target app
         targetApp.activate(options: .activateIgnoringOtherApps)
@@ -442,9 +443,9 @@ class CompletionWindowController: NSWindowController {
 
             // Verify the target app is now active
             if targetApp.isActive {
-                print("✅ Target app is active, inserting text...")
+                os_log("✅ Target app is active, inserting text...", log: .ui, type: .info)
             } else {
-                print("⚠️  Target app not yet active, proceeding anyway...")
+                os_log("⚠️  Target app not yet active, proceeding anyway...", log: .ui, type: .info)
             }
 
             let success = AccessibilityManager.shared.insertCompletion(
@@ -455,9 +456,9 @@ class CompletionWindowController: NSWindowController {
             self.isInsertingText = false
 
             if success {
-                print("✅ Inserted completion: '\(selectedText)'")
+                os_log("✅ Inserted completion: '%{private}@'", log: .ui, type: .info, selectedText)
             } else {
-                print("❌ Failed to insert completion")
+                os_log("❌ Failed to insert completion", log: .ui, type: .error)
             }
 
             // Hide window after insertion attempt

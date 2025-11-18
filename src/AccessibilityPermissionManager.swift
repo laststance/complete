@@ -1,5 +1,6 @@
 import Cocoa
 import ApplicationServices
+import os.log
 
 /// Manages accessibility permission checking and requesting
 /// Extracted from AccessibilityManager for single responsibility
@@ -17,7 +18,8 @@ class AccessibilityPermissionManager {
     /// - Returns: true if permissions granted, false otherwise
     func checkPermissionStatus() -> Bool {
         let trusted = AXIsProcessTrusted()
-        print(trusted ? "✅ Accessibility permissions granted" : "⚠️  Accessibility permissions not granted")
+        os_log("%{public}@ Accessibility permissions %{public}@", log: .accessibility, type: trusted ? .info : .error, 
+               trusted ? "✅" : "⚠️", trusted ? "granted" : "not granted")
         return trusted
     }
 
@@ -25,7 +27,6 @@ class AccessibilityPermissionManager {
     /// - Parameter showPrompt: If true, shows system permission dialog
     /// - Returns: true if permissions granted, false otherwise
     func checkPermissionStatus(showPrompt: Bool) -> Bool {
-        // Create options dictionary for AXIsProcessTrustedWithOptions
         let options: NSDictionary = [
             kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: showPrompt
         ]
@@ -33,7 +34,7 @@ class AccessibilityPermissionManager {
         let trusted = AXIsProcessTrustedWithOptions(options)
 
         if showPrompt && !trusted {
-            print("📋 System permission dialog displayed")
+            os_log("System permission dialog displayed", log: .accessibility, type: .info)
         }
 
         return trusted
@@ -44,22 +45,19 @@ class AccessibilityPermissionManager {
     /// Request accessibility permissions with user guidance
     /// Shows system dialog and provides instructions
     func requestPermissions() {
-        print("🔐 Requesting accessibility permissions...")
+        os_log("Requesting accessibility permissions", log: .accessibility, type: .info)
 
-        // Check if already granted
         if checkPermissionStatus() {
-            print("✅ Permissions already granted")
+            os_log("Permissions already granted", log: .accessibility, type: .info)
             alertManager.showPermissionGrantedAlert()
             return
         }
 
-        // Show system prompt
         let granted = checkPermissionStatus(showPrompt: true)
 
         if granted {
             alertManager.showPermissionGrantedAlert()
         } else {
-            // Permissions not granted, show guidance
             alertManager.showPermissionGuidanceAlert()
         }
     }
@@ -70,7 +68,7 @@ class AccessibilityPermissionManager {
         let granted = checkPermissionStatus()
 
         if !granted {
-            print("⚠️  Accessibility permissions required")
+            os_log("Accessibility permissions required", log: .accessibility, type: .error)
             requestPermissions()
             return false
         }
@@ -83,35 +81,33 @@ class AccessibilityPermissionManager {
     /// Test accessibility permissions with detailed output
     /// For development and debugging
     func testPermissions() {
-        print("\n=== Accessibility Permission Test ===")
+        os_log("=== Accessibility Permission Test ===", log: .accessibility, type: .info)
 
-        print("1️⃣ Checking permission status...")
+        os_log("1️⃣ Checking permission status...", log: .accessibility, type: .debug)
         let granted = checkPermissionStatus()
 
         if granted {
-            print("✅ PASS: Accessibility permissions are granted")
-            print("   App can read and manipulate UI elements")
+            os_log("✅ PASS: Accessibility permissions are granted", log: .accessibility, type: .info)
+            os_log("App can read and manipulate UI elements", log: .accessibility, type: .debug)
         } else {
-            print("❌ FAIL: Accessibility permissions not granted")
-            print("   App cannot access UI elements")
+            os_log("❌ FAIL: Accessibility permissions not granted", log: .accessibility, type: .error)
+            os_log("App cannot access UI elements", log: .accessibility, type: .error)
         }
 
-        print("\n2️⃣ Testing AXUIElement access...")
+        os_log("2️⃣ Testing AXUIElement access...", log: .accessibility, type: .debug)
         if granted {
             testAXUIElementAccess()
         } else {
-            print("⏭️  Skipped (permissions not granted)")
+            os_log("Skipped (permissions not granted)", log: .accessibility, type: .debug)
         }
 
-        print("\n=====================================\n")
+        os_log("=====================================", log: .accessibility, type: .info)
     }
 
     /// Test basic AXUIElement access
     private func testAXUIElementAccess() {
-        // Get system-wide accessibility element
         let systemWide = AXUIElementCreateSystemWide()
 
-        // Try to get focused element
         var focusedElement: AnyObject?
         let result = AXUIElementCopyAttributeValue(
             systemWide,
@@ -120,9 +116,8 @@ class AccessibilityPermissionManager {
         )
 
         if result == .success {
-            print("✅ PASS: Can access focused UI element")
+            os_log("✅ PASS: Can access focused UI element", log: .accessibility, type: .info)
 
-            // Try to get role
             if let element = focusedElement {
                 var role: AnyObject?
                 let roleResult = AXUIElementCopyAttributeValue(
@@ -132,12 +127,12 @@ class AccessibilityPermissionManager {
                 )
 
                 if roleResult == .success, let roleString = role as? String {
-                    print("   Focused element role: \(roleString)")
+                    os_log("Focused element role: %{public}@", log: .accessibility, type: .debug, roleString)
                 }
             }
         } else {
-            print("⚠️  WARNING: Could not access focused element")
-            print("   Error code: \(result.rawValue)")
+            os_log("⚠️ WARNING: Could not access focused element", log: .accessibility, type: .error)
+            os_log("Error code: %d", log: .accessibility, type: .error, result.rawValue)
         }
     }
 }

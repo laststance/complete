@@ -1,4 +1,5 @@
 import Cocoa
+import os.log
 
 /// Manages user alerts and guidance for accessibility permissions
 /// Extracted from AccessibilityManager for single responsibility
@@ -91,6 +92,6 @@ class AccessibilityAlertManager {
             NSWorkspace.shared.open(url)
         }
 
-        print("🔧 Opened System Settings → Privacy & Security → Accessibility")
+        os_log("🔧 Opened System Settings → Privacy & Security → Accessibility", log: .accessibility)
     }
 }
