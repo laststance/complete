@@ -5,6 +5,17 @@ import os.log
 /// Manages app lifecycle for LSUIElement background agent
 class AppDelegate: NSObject, NSApplicationDelegate {
 
+    // MARK: - Managed Dependencies (Dependency Injection)
+
+    /// Settings manager (owned instance, not singleton)
+    private let settingsManager: SettingsManaging
+
+    /// Completion engine (owned instance, not singleton)
+    private let completionEngine: CompletionProviding
+
+    /// Accessibility manager (owned instance, not singleton)
+    private let accessibilityManager: AccessibilityManaging
+
     // MARK: - Properties
 
     /// Status bar menu icon (provides access to settings when dock icon is hidden)
@@ -12,6 +23,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Main menu for status bar
     private var statusMenu: NSMenu?
+
+    // MARK: - Initialization
+
+    override init() {
+        // Initialize managed dependencies
+        // Note: We still use .shared here as a temporary bridge during migration
+        // Future work: Create new instances and inject them throughout the app
+        self.settingsManager = SettingsManager.shared
+        self.completionEngine = CompletionEngine.shared
+        self.accessibilityManager = AccessibilityManager.shared
+
+        super.init()
+    }
 
     // MARK: - Application Lifecycle
 
@@ -28,7 +52,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         checkAccessibilityPermissions()
 
         // Restore saved settings
-        SettingsManager.shared.restoreSettings()
+        settingsManager.restoreSettings()
 
         os_log("✅ Application initialization complete", log: .app, type: .info)
     }
@@ -37,15 +61,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Check accessibility permissions and request if needed
     private func checkAccessibilityPermissions() {
-        let manager = AccessibilityManager.shared
-
+        // Use owned accessibility manager instance
         // Test permissions in debug mode
         #if DEBUG
-        manager.testPermissions()
+        accessibilityManager.testPermissions()
         #endif
 
         // Verify and request if needed
-        let permissionsGranted = manager.verifyAndRequestIfNeeded()
+        let permissionsGranted = accessibilityManager.verifyAndRequestIfNeeded()
 
         if permissionsGranted {
             // Permissions granted - set up hotkey manager

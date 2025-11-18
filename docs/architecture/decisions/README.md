@@ -26,6 +26,7 @@ Each ADR follows a standard template (see `template.md`) with the following sect
 | [003](003-completion-engine-design.md) | Completion Engine Design: NSSpellChecker with Aggressive Caching | Accepted | 2024-11-08 | TextEdit compatibility, 85-95% cache hit rate |
 | [004](004-result-based-error-handling.md) | Result-Based Error Handling Strategy | Accepted | 2024-11-08 | Type-safe errors, user-friendly messages |
 | [005](005-structured-logging-with-oslog.md) | Structured Logging Strategy: os_log | Accepted | 2024-11-08 | Async logging, production debugging |
+| [006](006-partial-dependency-injection.md) | Partial Dependency Injection Strategy | Accepted | 2025-11-19 | Protocol-based DI for 3 managers, testability |
 
 ## Decision Categories
 
@@ -41,10 +42,12 @@ Each ADR follows a standard template (see `template.md`) with the following sect
 ### Code Quality
 - [004](004-result-based-error-handling.md): Type-safe error handling
 - [005](005-structured-logging-with-oslog.md): Structured debugging
+- [006](006-partial-dependency-injection.md): Protocol-based testability
 
 ### Architecture
 - [001](001-ui-framework-choice.md): Hybrid AppKit + SwiftUI approach
 - [004](004-result-based-error-handling.md): Result type pattern
+- [006](006-partial-dependency-injection.md): Partial dependency injection
 
 ## How to Use This Directory
 
