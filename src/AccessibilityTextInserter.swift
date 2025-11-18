@@ -1,5 +1,6 @@
 import Cocoa
 import ApplicationServices
+import os.log
 
 /// Manages text insertion strategies via accessibility API and CGEvent simulation
 /// Extracted from AccessibilityManager for single responsibility
@@ -24,7 +25,7 @@ class AccessibilityTextInserter {
     /// - Returns: true if successful, false otherwise
     func insertCompletion(_ completion: String, replacing context: TextContext) -> Bool {
         guard permissionManager.checkPermissionStatus() else {
-            print("❌ Cannot insert text: Accessibility permissions not granted")
+            os_log("❌ Cannot insert text: Accessibility permissions not granted", log: .accessibility, type: .error)
             return false
         }
 
@@ -35,7 +36,7 @@ class AccessibilityTextInserter {
 
         // Fallback for web browsers: use element at cursor position
         if focusedElement == nil {
-            print("⚠️  No focused element for insertion (likely web browser), trying element at cursor position...")
+            os_log("⚠️  No focused element for insertion (likely web browser), trying element at cursor position...", log: .accessibility, type: .debug)
 
             // Get current cursor screen position
             switch elementExtractor.getCursorScreenPosition() {
@@ -43,35 +44,35 @@ class AccessibilityTextInserter {
                 focusedElement = elementExtractor.getElementAtPosition(cursorPosition)
 
                 if focusedElement != nil {
-                    print("✅ Found element at cursor position for insertion (web browser support)")
+                    os_log("✅ Found element at cursor position for insertion (web browser support)", log: .accessibility, type: .debug)
                 } else {
-                    print("❌ Failed to get element at cursor position for insertion")
+                    os_log("❌ Failed to get element at cursor position for insertion", log: .accessibility, type: .error)
                 }
             case .failure:
-                print("❌ Failed to get cursor position for insertion")
+                os_log("❌ Failed to get cursor position for insertion", log: .accessibility, type: .error)
             }
         }
 
         guard let element = focusedElement else {
-            print("❌ No focused element for text insertion")
+            os_log("❌ No focused element for text insertion", log: .accessibility, type: .error)
             return false
         }
 
-        print("📝 Inserting completion: '\(completion)' replacing '\(context.wordAtCursor)'")
+        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, completion, context.wordAtCursor)
 
         // Strategy 1: Try direct AX API replacement (fastest, ~10-20ms)
         if let success = tryDirectReplacement(completion, context: context, element: element), success {
-            print("✅ Insertion successful via direct AX API")
+            os_log("✅ Insertion successful via direct AX API", log: .accessibility, type: .debug)
             return true
         }
 
         // Strategy 2: Use CGEvent keystroke simulation (more reliable, ~20-40ms)
         if simulateKeystrokeInsertion(completion, context: context) {
-            print("✅ Insertion successful via CGEvent simulation")
+            os_log("✅ Insertion successful via CGEvent simulation", log: .accessibility, type: .debug)
             return true
         }
 
-        print("❌ Text insertion failed")
+        os_log("❌ Text insertion failed", log: .accessibility, type: .error)
         return false
     }
 
@@ -99,7 +100,7 @@ class AccessibilityTextInserter {
 
         // Log if we had to adjust positions (indicates potential timing/sync issues)
         if validCursorPosition != context.cursorPosition {
-            print("⚠️  Cursor position adjusted: \(context.cursorPosition) → \(validCursorPosition) (text length: \(currentText.count))")
+            os_log("⚠️  Cursor position adjusted: %d → %d (text length: %d)", log: .accessibility, type: .debug, context.cursorPosition, validCursorPosition, currentText.count)
         }
 
         // Create new text with completion (using safe bounds)
@@ -135,7 +136,7 @@ class AccessibilityTextInserter {
 
         // Log if we had to adjust position
         if validPosition != position {
-            print("⚠️  Insertion position adjusted: \(position) → \(validPosition) (text length: \(currentText.count))")
+            os_log("⚠️  Insertion position adjusted: %d → %d (text length: %d)", log: .accessibility, type: .debug, position, validPosition, currentText.count)
         }
 
         let beforeCursor = String(currentText.prefix(validPosition))
@@ -197,7 +198,7 @@ class AccessibilityTextInserter {
     private func typeText(_ text: String) -> Bool {
         for char in text {
             guard let keyCode = characterToKeyCode(char) else {
-                print("⚠️  No key code for character: '\(char)'")
+                os_log("⚠️  No key code for character: '%{private}@'", log: .accessibility, type: .debug, String(char))
                 continue
             }
 

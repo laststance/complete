@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import os.log
 
 /// Window controller for the settings/preferences window
 class SettingsWindowController: NSWindowController {
@@ -60,14 +61,14 @@ class SettingsWindowController: NSWindowController {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        print("⚙️  Settings window opened")
+        os_log("⚙️  Settings window opened", log: .settings, type: .info)
     }
 
     /// Hide settings window
     func hide() {
         window?.close()
 
-        print("⚙️  Settings window closed")
+        os_log("⚙️  Settings window closed", log: .settings, type: .info)
     }
 
     /// Toggle settings window visibility

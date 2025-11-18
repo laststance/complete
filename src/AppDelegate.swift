@@ -1,4 +1,5 @@
 import Cocoa
+import os.log
 
 /// Main application delegate
 /// Manages app lifecycle for LSUIElement background agent
@@ -15,7 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Application Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("✅ Complete app launched as LSUIElement background agent")
+        os_log("✅ Complete app launched as LSUIElement background agent", log: .app, type: .info)
 
         // Set up status bar menu (required since LSUIElement = YES hides dock icon)
         setupStatusBarMenu()
@@ -29,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Restore saved settings
         SettingsManager.shared.restoreSettings()
 
-        print("✅ Application initialization complete")
+        os_log("✅ Application initialization complete", log: .app, type: .info)
     }
 
     // MARK: - Accessibility Permissions
@@ -50,9 +51,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Permissions granted - set up hotkey manager
             setupHotkeyManager()
         } else {
-            print("⚠️  Accessibility permissions not granted")
-            print("   App functionality will be limited until permissions are granted")
-            print("   Hotkey registration delayed until permissions are granted")
+            os_log("⚠️  Accessibility permissions not granted", log: .app, type: .error)
+            os_log("   App functionality will be limited until permissions are granted", log: .app, type: .info)
+            os_log("   Hotkey registration delayed until permissions are granted", log: .app, type: .info)
         }
     }
 
@@ -61,23 +62,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set up global hotkey manager
     /// Only called after accessibility permissions are verified
     private func setupHotkeyManager() {
-        let hotkeyManager = HotkeyManager.shared
+        // HotkeyManager auto-initializes in init()
+        _ = HotkeyManager.shared
 
-        // Set up hotkey listeners
-        hotkeyManager.setup()
-
-        // Test in debug mode
-        #if DEBUG
-        Task { @MainActor in
-            hotkeyManager.testHotkey()
-        }
-        #endif
-
-        print("✅ Hotkey manager initialized")
+        os_log("✅ Hotkey manager initialized", log: .app, type: .info)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        print("👋 Complete app terminating")
+        os_log("👋 Complete app terminating", log: .app, type: .info)
         // Cleanup will be implemented in later phases
     }
 
@@ -94,7 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         guard let statusItem = statusItem else {
-            print("⚠️  Failed to create status bar item")
+            os_log("⚠️  Failed to create status bar item", log: .app, type: .error)
             return
         }
 
@@ -131,7 +123,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Assign menu to status item
         statusItem.menu = statusMenu
 
-        print("✅ Status bar menu created")
+        os_log("✅ Status bar menu created", log: .app, type: .info)
     }
 
     // MARK: - Menu Actions
@@ -167,21 +159,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch activationPolicy {
         case .regular:
-            print("⚠️  WARNING: App running as regular app (dock icon visible)")
-            print("⚠️  LSUIElement configuration may not be working")
+            os_log("⚠️  WARNING: App running as regular app (dock icon visible)", log: .app, type: .error)
+            os_log("⚠️  LSUIElement configuration may not be working", log: .app, type: .info)
         case .accessory:
-            print("✅ App running as accessory (no dock icon)")
+            os_log("✅ App running as accessory (no dock icon)", log: .app, type: .info)
         case .prohibited:
-            print("⚠️  App activation prohibited")
+            os_log("⚠️  App activation prohibited", log: .app, type: .error)
         @unknown default:
-            print("⚠️  Unknown activation policy")
+            os_log("⚠️  Unknown activation policy", log: .app, type: .error)
         }
 
         // Verify menu bar is accessible
         if statusItem != nil {
-            print("✅ Status bar menu accessible")
+            os_log("✅ Status bar menu accessible", log: .app, type: .info)
         } else {
-            print("❌ Status bar menu not accessible")
+            os_log("❌ Status bar menu not accessible", log: .app, type: .error)
         }
     }
 }

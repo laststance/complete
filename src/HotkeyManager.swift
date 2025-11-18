@@ -1,87 +1,87 @@
 import Cocoa
 import KeyboardShortcuts
+import os.log
 
-/// Manages global keyboard shortcuts for triggering completion
-/// Based on research: docs/macos-global-hotkey-research-2024.md
-/// Uses KeyboardShortcuts library for 20-50ms response time and conflict detection
+/// Manages global hotkey registration and completion workflow trigger
+/// Uses KeyboardShortcuts library for cross-platform hotkey support
 class HotkeyManager {
 
-    // MARK: - Singleton
-
+    /// Singleton instance
     static let shared = HotkeyManager()
 
     private init() {
-        // Shortcut names are registered in the extension below
+        setupHotkey()
     }
 
-    // MARK: - Setup
+    // MARK: - Hotkey Setup
 
-    /// Set up global hotkey listeners
-    /// Call this after accessibility permissions are granted
-    func setup() {
-        print("⌨️  Setting up global hotkey listeners...")
-
-        // Listen for completion trigger shortcut
-        KeyboardShortcuts.onKeyUp(for: .completionTrigger) { [weak self] in
-            self?.handleCompletionTrigger()
+    /// Set up global hotkey listener for completion trigger
+    private func setupHotkey() {
+        // Register handler for completion trigger shortcut
+        KeyboardShortcuts.onKeyDown(for: .completionTrigger) { [weak self] in
+            os_log("Hotkey triggered", log: .hotkey, type: .info)
+            Task { @MainActor in
+                self?.triggerCompletion()
+            }
         }
 
-        // Verify shortcut is registered
-        if let shortcut = KeyboardShortcuts.getShortcut(for: .completionTrigger) {
-            print("✅ Completion trigger registered: \(shortcut)")
-        } else {
-            print("⚠️  Completion trigger using default: Ctrl+I")
-        }
-
-        print("✅ Hotkey manager ready")
+        os_log("Global hotkey registered", log: .hotkey, type: .info)
     }
 
-    /// Clean up hotkey listeners
-    func cleanup() {
-        print("🧹 Cleaning up hotkey listeners")
-        // KeyboardShortcuts handles cleanup automatically
-    }
+    // MARK: - Completion Workflow
 
-    // MARK: - Shortcut Handling
+    /// Main completion workflow triggered by hotkey
+    /// Coordinates: Permission → Text extraction → Completion → Window display → Insertion
+    @MainActor
+    private func triggerCompletion() {
+        os_log("=== Completion Workflow Started ===", log: .hotkey, type: .info)
 
-    /// Handle completion trigger shortcut (Ctrl+I)
-    private func handleCompletionTrigger() {
-        print("\n⚡ Completion trigger activated!")
-
-        // Verify accessibility permissions before proceeding
+        // Phase 1: Check accessibility permissions
+        os_log("Phase 1: Checking accessibility permissions", log: .hotkey, type: .debug)
         guard AccessibilityManager.shared.checkPermissionStatus() else {
-            print("❌ Cannot trigger completion: Accessibility permissions not granted")
+            os_log("Accessibility permissions not granted", log: .hotkey, type: .error)
             AccessibilityManager.shared.showPermissionDeniedAlert()
             return
         }
+        os_log("Accessibility permissions verified", log: .hotkey, type: .debug)
+
+        // Phase 2: Get focused application for proper window activation later
+        os_log("Phase 2: Getting active application", log: .hotkey, type: .debug)
+        guard let activeApp = NSWorkspace.shared.frontmostApplication else {
+            os_log("Could not get active application", log: .hotkey, type: .error)
+            return
+        }
+        os_log("Active app: %{public}@", log: .hotkey, type: .debug, activeApp.localizedName ?? "Unknown")
 
         // Phase 3: Extract text at cursor position
+        os_log("Phase 3: Extracting text context", log: .hotkey, type: .debug)
         let textContext: TextContext
         switch AccessibilityManager.shared.extractTextContext() {
         case .success(let context):
             textContext = context
         case .failure(let error):
-            print("⚠️  Could not extract text context: \(error.userFriendlyMessage)")
+            os_log("Could not extract text context: %{public}@", log: .hotkey, type: .error, error.userFriendlyMessage)
             showNoTextFeedback()
             return
         }
 
-        print("📝 Text extracted successfully!")
-        print("   Word at cursor: '\(textContext.wordAtCursor)'")
-        print("   Context: '\(textContext.textBeforeCursor.suffix(30))...")
+        os_log("Text extracted successfully", log: .hotkey, type: .info)
+        os_log("Word at cursor: %{private}@", log: .hotkey, type: .debug, textContext.wordAtCursor)
+        os_log("Cursor position: %d", log: .hotkey, type: .debug, textContext.cursorPosition)
 
         // Phase 4: Generate completion suggestions based on textContext
+        os_log("Phase 4: Generating completions", log: .hotkey, type: .debug)
         let completions = CompletionEngine.shared.completions(for: textContext.wordAtCursor)
-        
+
         if completions.isEmpty {
-            print("ℹ️  No completions found for '\(textContext.wordAtCursor)'")
-            showNoCompletionsFeedback(wordAtCursor: textContext.wordAtCursor)
+            os_log("No completions found for: %{private}@", log: .hotkey, type: .info, textContext.wordAtCursor)
+            showNoCompletionsFeedback()
             return
         }
-        
-        print("✅ Generated \(completions.count) completions:")
-        for (index, completion) in completions.prefix(10).enumerated() {
-            print("   \(index + 1). \(completion)")
+
+        os_log("Generated %d completions", log: .hotkey, type: .info, completions.count)
+        for (index, completion) in completions.prefix(3).enumerated() {
+            os_log("%d. %{private}@", log: .hotkey, type: .debug, index + 1, completion)
         }
 
         // Get cursor screen position for accurate window placement
@@ -89,9 +89,9 @@ class HotkeyManager {
         switch AccessibilityManager.shared.getCursorScreenPosition() {
         case .success(let position):
             cursorPosition = position
-            print("📍 Cursor position: (\(position.x), \(position.y))")
+            os_log("Cursor position: (%.1f, %.1f)", log: .hotkey, type: .debug, position.x, position.y)
         case .failure(let error):
-            print("⚠️  Could not get cursor position: \(error.userFriendlyMessage), using mouse location fallback")
+            os_log("Could not get cursor position: %{public}@, using mouse fallback", log: .hotkey, type: .error, error.userFriendlyMessage)
             cursorPosition = NSEvent.mouseLocation
         }
 
@@ -102,88 +102,28 @@ class HotkeyManager {
                 textContext: textContext,
                 near: cursorPosition
             )
-            print("✅ Completion window displayed with \(completions.count) suggestions")
+            os_log("Completion window displayed with %d suggestions", log: .hotkey, type: .info, completions.count)
         }
+
+        // Phase 6: Handle completion selection and insertion
+        // (Handled by CompletionWindowController callbacks)
+        os_log("=== Completion Workflow Complete ===", log: .hotkey, type: .info)
     }
 
-    /// Show feedback when no completions are available
-    private func showNoCompletionsFeedback(wordAtCursor: String) {
-        print("ℹ️  No completions available for '\(wordAtCursor)'")
-        print("   Word may be too short or not in dictionary")
-        NSSound.beep()
-    }
+    // MARK: - User Feedback
 
-    /// Show feedback when no text element is focused
+    /// Show brief visual feedback when no text is available
     private func showNoTextFeedback() {
-        print("ℹ️  No text field focused")
-        print("   Please click in a text field and try again")
+        os_log("Showing no-text feedback to user", log: .ui, type: .debug)
+        // Could show a brief notification or beep
         NSSound.beep()
     }
 
-    // MARK: - Shortcut Management
-
-    /// Get current completion trigger shortcut
-    /// - Returns: Current keyboard shortcut or nil if not set
-    func getCurrentShortcut() -> KeyboardShortcuts.Shortcut? {
-        return KeyboardShortcuts.getShortcut(for: .completionTrigger)
-    }
-
-    /// Set custom completion trigger shortcut
-    /// - Parameter shortcut: New keyboard shortcut
-    func setCompletionShortcut(_ shortcut: KeyboardShortcuts.Shortcut) {
-        KeyboardShortcuts.setShortcut(shortcut, for: .completionTrigger)
-        print("✅ Completion shortcut updated to: \(shortcut)")
-    }
-
-    /// Reset completion trigger to default (Ctrl+I)
-    func resetToDefault() {
-        KeyboardShortcuts.setShortcut(.init(.i, modifiers: [.control]), for: .completionTrigger)
-        print("✅ Completion shortcut reset to default: Ctrl+I")
-    }
-
-    /// Check if shortcut conflicts with system shortcuts
-    /// - Parameter shortcut: Shortcut to check
-    /// - Returns: true if no conflicts, false if conflicts exist
-    func checkForConflicts(_ shortcut: KeyboardShortcuts.Shortcut) -> Bool {
-        // KeyboardShortcuts library handles conflict detection automatically
-        // When user tries to set a conflicting shortcut in the recorder,
-        // it will show a warning and prevent the assignment
-
-        // Note: isTakenBySystem is internal to the library
-        // Conflict detection is handled by the KeyboardShortcuts.Recorder UI
-        print("ℹ️  Conflict detection is handled by KeyboardShortcuts library")
-        return true
-    }
-
-    // MARK: - Testing
-
-    /// Test hotkey functionality
-    /// For development and debugging
-    @MainActor
-    func testHotkey() {
-        print("\n=== Hotkey Manager Test ===")
-
-        print("1️⃣ Testing shortcut registration...")
-        if let shortcut = getCurrentShortcut() {
-            print("✅ PASS: Shortcut registered - \(shortcut.description)")
-        } else {
-            print("⚠️  Using default shortcut: Ctrl+I")
-        }
-
-        print("\n2️⃣ Testing conflict detection...")
-        if let shortcut = getCurrentShortcut() {
-            _ = checkForConflicts(shortcut)
-            print("✅ PASS: Conflict detection handled by KeyboardShortcuts library")
-        }
-
-        print("\n3️⃣ Shortcut status:")
-        if let shortcut = getCurrentShortcut() {
-            print("   Press \(shortcut.description) to trigger completion")
-        } else {
-            print("   Press Ctrl+I to trigger completion")
-        }
-
-        print("\n===========================\n")
+    /// Show brief visual feedback when no completions are found
+    private func showNoCompletionsFeedback() {
+        os_log("Showing no-completions feedback to user", log: .ui, type: .debug)
+        // Could show a brief notification
+        NSSound.beep()
     }
 }
 

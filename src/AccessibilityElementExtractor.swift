@@ -1,5 +1,6 @@
 import Cocoa
 import ApplicationServices
+import os.log
 
 /// Manages text extraction and cursor position detection from accessibility elements
 /// Extracted from AccessibilityManager for single responsibility
@@ -29,16 +30,16 @@ class AccessibilityElementExtractor {
 
         // Fallback for web browsers: use element at cursor position
         if focusedElement == nil {
-            print("⚠️  No focused element (likely web browser), trying element at cursor position...")
+            os_log("⚠️  No focused element (likely web browser), trying element at cursor position...", log: .accessibility, type: .debug)
 
             // Get current cursor screen position
             switch getCursorScreenPosition() {
             case .success(let cursorPosition):
-                print("📍 Cursor position: (\(cursorPosition.x), \(cursorPosition.y))")
+                os_log("📍 Cursor position: (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorPosition.x, cursorPosition.y)
                 focusedElement = getElementAtPosition(cursorPosition)
 
                 if focusedElement != nil {
-                    print("✅ Found element at cursor position (web browser support)")
+                    os_log("✅ Found element at cursor position (web browser support)", log: .accessibility, type: .debug)
                 } else {
                     return .failure(.elementNotFoundAtPosition(x: cursorPosition.x, y: cursorPosition.y))
                 }
@@ -75,10 +76,10 @@ class AccessibilityElementExtractor {
             selectedRange: selectedRange
         )
 
-        print("📝 Text context extracted:")
-        print("   Word at cursor: '\(wordAtCursor)'")
-        print("   Cursor position: \(cursorPosition)")
-        print("   Text before: '\(textBefore.suffix(20))'")
+        os_log("📝 Text context extracted:", log: .accessibility, type: .debug)
+        os_log("   Word at cursor: '%{private}@'", log: .accessibility, type: .debug, wordAtCursor)
+        os_log("   Cursor position: %{public}d", log: .accessibility, type: .debug, cursorPosition)
+        os_log("   Text before: '%{private}@'", log: .accessibility, type: .debug, textBefore.suffix(20))
 
         return .success(context)
     }
@@ -113,7 +114,7 @@ class AccessibilityElementExtractor {
         )
 
         guard result == .success else {
-            print("⚠️  Failed to get element at position (\(point.x), \(point.y))")
+            os_log("⚠️  Failed to get element at position (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
             return nil
         }
 
@@ -231,10 +232,10 @@ class AccessibilityElementExtractor {
         let focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
 
         guard let focusedElement = focusedElement else {
-            print("⚠️  No focused element for cursor position, using mouse position")
+            os_log("⚠️  No focused element for cursor position, using mouse position", log: .accessibility, type: .debug)
             // Fallback to mouse cursor position for web browsers
             let mousePosition = NSEvent.mouseLocation
-            print("📍 Using mouse position: (\(mousePosition.x), \(mousePosition.y))")
+            os_log("📍 Using mouse position: (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
             return .success(mousePosition)
         }
 
@@ -246,7 +247,7 @@ class AccessibilityElementExtractor {
             let rangeSuccess = AXValueGetValue(axValue, .cfRange, &range)
 
             if rangeSuccess {
-                print("📍 Selected range: location=\(range.location), length=\(range.length)")
+                os_log("📍 Selected range: location=%{public}d, length=%{public}d", log: .accessibility, type: .debug, range.location, range.length)
 
                 // Create AXValue for the range parameter
                 var mutableRange = range
@@ -270,15 +271,13 @@ class AccessibilityElementExtractor {
                     let boundsSuccess = AXValueGetValue(boundsAXValue, .cgRect, &bounds)
 
                     if boundsSuccess {
-                        print("📍 Cursor bounds rect: \(bounds)")
-                        print("   - origin: (\(bounds.origin.x), \(bounds.origin.y))")
-                        print("   - size: (\(bounds.width) × \(bounds.height))")
+                        os_log("📍 Cursor bounds rect: origin(%{public}f, %{public}f) size(%{public}f × %{public}f)", log: .accessibility, type: .debug, bounds.origin.x, bounds.origin.y, bounds.width, bounds.height)
 
                         let cursorBottomY = bounds.maxY
                         let cursorX = bounds.origin.x
 
                         let cursorPosition = CGPoint(x: cursorX, y: cursorBottomY)
-                        print("📍 Cursor position (bottom of cursor): (\(cursorPosition.x), \(cursorPosition.y))")
+                        os_log("📍 Cursor position (bottom of cursor): (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorPosition.x, cursorPosition.y)
                         return .success(cursorPosition)
                     }
                 }
@@ -292,15 +291,15 @@ class AccessibilityElementExtractor {
             let success = AXValueGetValue(axValue, .cgPoint, &point)
 
             if success {
-                print("📍 Cursor position from element bounds: (\(point.x), \(point.y))")
-                print("⚠️  Using element position as fallback")
+                os_log("📍 Cursor position from element bounds: (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
+                os_log("⚠️  Using element position as fallback", log: .accessibility, type: .debug)
                 return .success(point)
             }
         }
 
         // Strategy 3: Ultimate fallback to mouse cursor position
         let mousePosition = NSEvent.mouseLocation
-        print("📍 Using mouse position as fallback: (\(mousePosition.x), \(mousePosition.y))")
+        os_log("📍 Using mouse position as fallback: (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
         return .success(mousePosition)
     }
 }
