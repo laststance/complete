@@ -339,19 +339,29 @@ final class CompleteTests: XCTestCase {
     }
 
     func testAccessibilityManager_ExtractTextContext_NoFocusedElement() {
-        // In test environment with no focused element, should return nil or empty context
-        let context = AccessibilityManager.shared.extractTextContext()
-
-        // Verify method returns (may be nil in test environment)
-        XCTAssertTrue(context == nil || context != nil, "Should return context or nil")
+        // In test environment with no focused element, should return error or success
+        let result = AccessibilityManager.shared.extractTextContext()
+        
+        // Verify method returns a Result (either success or failure)
+        switch result {
+        case .success(let context):
+            XCTAssertNotNil(context, "Context should not be nil on success")
+        case .failure(let error):
+            XCTAssertTrue(error is AccessibilityError, "Should return AccessibilityError")
+        }
     }
-
+    
     func testAccessibilityManager_GetCursorScreenPosition_NoFocusedElement() {
         // In test environment, may not have cursor position
-        let position = AccessibilityManager.shared.getCursorScreenPosition()
-
-        // Verify method returns (may be nil in test environment)
-        XCTAssertTrue(position == nil || position != nil, "Should return position or nil")
+        let result = AccessibilityManager.shared.getCursorScreenPosition()
+        
+        // Verify method returns a Result (either success or failure)
+        switch result {
+        case .success(let position):
+            XCTAssertNotNil(position, "Position should not be nil on success")
+        case .failure(let error):
+            XCTAssertTrue(error is AccessibilityError, "Should return AccessibilityError")
+        }
     }
 
     func testAccessibilityManager_InsertCompletion_MethodExists() {

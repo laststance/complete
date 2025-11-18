@@ -101,8 +101,8 @@ class AccessibilityManager {
 
     /// Extract text context from currently focused UI element
     /// Performance target: <50ms (typical 10-25ms per research)
-    /// - Returns: TextContext if successful, nil otherwise
-    func extractTextContext() -> TextContext? {
+    /// - Returns: Result with TextContext or AccessibilityError
+    func extractTextContext() -> Result<TextContext, AccessibilityError> {
         return elementExtractor.extractTextContext()
     }
 
@@ -110,8 +110,8 @@ class AccessibilityManager {
 
     /// Get cursor screen coordinates for window positioning
     /// - Parameter element: Optional AX element to use (if nil, will try to get focused element)
-    /// - Returns: CGPoint with cursor screen position, or nil if unavailable
-    func getCursorScreenPosition(from element: AXUIElement? = nil) -> CGPoint? {
+    /// - Returns: Result with CGPoint or AccessibilityError
+    func getCursorScreenPosition(from element: AXUIElement? = nil) -> Result<CGPoint, AccessibilityError> {
         return elementExtractor.getCursorScreenPosition(from: element)
     }
 

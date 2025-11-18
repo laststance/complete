@@ -38,7 +38,8 @@ class AccessibilityTextInserter {
             print("⚠️  No focused element for insertion (likely web browser), trying element at cursor position...")
 
             // Get current cursor screen position
-            if let cursorPosition = elementExtractor.getCursorScreenPosition() {
+            switch elementExtractor.getCursorScreenPosition() {
+            case .success(let cursorPosition):
                 focusedElement = elementExtractor.getElementAtPosition(cursorPosition)
 
                 if focusedElement != nil {
@@ -46,6 +47,8 @@ class AccessibilityTextInserter {
                 } else {
                     print("❌ Failed to get element at cursor position for insertion")
                 }
+            case .failure:
+                print("❌ Failed to get cursor position for insertion")
             }
         }
 
