@@ -271,16 +271,35 @@ class AccessibilityManager {
         // Get system-wide accessibility element
         let systemWide = AXUIElementCreateSystemWide()
 
-        // Get focused UI element
-        guard let focusedElement = getFocusedElement(from: systemWide) else {
+        // Try to get focused element (works for native apps)
+        var focusedElement = getFocusedElement(from: systemWide)
+
+        // Fallback for web browsers: use element at cursor position
+        if focusedElement == nil {
+            print("⚠️  No focused element (likely web browser), trying element at cursor position...")
+
+            // Get current cursor screen position
+            if let cursorPosition = getCursorScreenPosition() {
+                print("📍 Cursor position: (\(cursorPosition.x), \(cursorPosition.y))")
+                focusedElement = getElementAtPosition(cursorPosition)
+
+                if focusedElement != nil {
+                    print("✅ Found element at cursor position (web browser support)")
+                } else {
+                    print("❌ Failed to get element at cursor position")
+                }
+            }
+        }
+
+        guard let element = focusedElement else {
             print("⚠️  No focused text element found")
             return nil
         }
 
         // Extract text components
-        let fullText = getFullText(from: focusedElement) ?? ""
-        let selectedText = getSelectedText(from: focusedElement)
-        let selectedRange = getSelectedTextRange(from: focusedElement)
+        let fullText = getFullText(from: element) ?? ""
+        let selectedText = getSelectedText(from: element)
+        let selectedRange = getSelectedTextRange(from: element)
 
         // Calculate cursor position
         let cursorPosition = selectedRange?.location ?? 0
@@ -323,6 +342,30 @@ class AccessibilityManager {
         }
 
         return (focusedElement as! AXUIElement)
+    }
+
+    /// Get UI element at specific screen coordinates
+    /// Fallback for web browsers that don't expose focused element properly
+    /// - Parameters:
+    ///   - point: Screen coordinates (flipped coordinate system)
+    /// - Returns: AXUIElement at that position, or nil if unavailable
+    private func getElementAtPosition(_ point: CGPoint) -> AXUIElement? {
+        let systemWide = AXUIElementCreateSystemWide()
+        var element: AXUIElement?
+
+        let result = AXUIElementCopyElementAtPosition(
+            systemWide,
+            Float(point.x),
+            Float(point.y),
+            &element
+        )
+
+        guard result == .success else {
+            print("⚠️  Failed to get element at position (\(point.x), \(point.y))")
+            return nil
+        }
+
+        return element
     }
 
     /// Get full text from UI element
@@ -425,11 +468,18 @@ class AccessibilityManager {
     // MARK: - Cursor Position Detection
 
     /// Get cursor screen coordinates for window positioning
+    /// - Parameter element: Optional AX element to use (if nil, will try to get focused element)
     /// - Returns: CGPoint with cursor screen position, or nil if unavailable
-    func getCursorScreenPosition() -> CGPoint? {
-        guard let focusedElement = getFocusedElement(from: AXUIElementCreateSystemWide()) else {
-            print("⚠️  No focused element for cursor position")
-            return nil
+    func getCursorScreenPosition(from element: AXUIElement? = nil) -> CGPoint? {
+        // Use provided element, or try to get focused element
+        let focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
+
+        guard let focusedElement = focusedElement else {
+            print("⚠️  No focused element for cursor position, using mouse position")
+            // Fallback to mouse cursor position for web browsers
+            let mousePosition = NSEvent.mouseLocation
+            print("📍 Using mouse position: (\(mousePosition.x), \(mousePosition.y))")
+            return mousePosition
         }
 
         // Strategy 1: Get bounds for selected text range (most accurate)
@@ -527,7 +577,28 @@ class AccessibilityManager {
             return false
         }
 
-        guard let focusedElement = getFocusedElement(from: AXUIElementCreateSystemWide()) else {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        // Try to get focused element (works for native apps)
+        var focusedElement = getFocusedElement(from: systemWide)
+
+        // Fallback for web browsers: use element at cursor position
+        if focusedElement == nil {
+            print("⚠️  No focused element for insertion (likely web browser), trying element at cursor position...")
+
+            // Get current cursor screen position
+            if let cursorPosition = getCursorScreenPosition() {
+                focusedElement = getElementAtPosition(cursorPosition)
+
+                if focusedElement != nil {
+                    print("✅ Found element at cursor position for insertion (web browser support)")
+                } else {
+                    print("❌ Failed to get element at cursor position for insertion")
+                }
+            }
+        }
+
+        guard let element = focusedElement else {
             print("❌ No focused element for text insertion")
             return false
         }
@@ -535,7 +606,7 @@ class AccessibilityManager {
         print("📝 Inserting completion: '\(completion)' replacing '\(context.wordAtCursor)'")
 
         // Strategy 1: Try direct AX API replacement (fastest, ~10-20ms)
-        if let success = tryDirectReplacement(completion, context: context, element: focusedElement), success {
+        if let success = tryDirectReplacement(completion, context: context, element: element), success {
             print("✅ Insertion successful via direct AX API")
             return true
         }
