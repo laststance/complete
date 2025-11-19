@@ -7,7 +7,8 @@ struct CompletionListView: View {
     // MARK: - Properties
 
     @ObservedObject var viewModel: CompletionViewModel
-    
+    var onSelection: (() -> Void)?
+
     // Focus state to ensure keyboard input works immediately
     @FocusState private var isFocused: Bool
 
@@ -43,7 +44,7 @@ struct CompletionListView: View {
                                 .onTapGesture {
                                     viewModel.select(at: index)
                                     // Trigger selection action
-                                    CompletionWindowController.shared.handleMouseSelection()
+                                    onSelection?()
                                 }
                             }
                         }
@@ -116,7 +117,7 @@ struct CompletionListView_Previews: PreviewProvider {
         Group {
             // Preview with completions
             CompletionListView(viewModel: {
-                let vm = CompletionViewModel.shared
+                let vm = CompletionViewModel()
                 vm.completions = [
                     "completion",
                     "complete",
@@ -136,7 +137,7 @@ struct CompletionListView_Previews: PreviewProvider {
 
             // Preview with selection in middle
             CompletionListView(viewModel: {
-                let vm = CompletionViewModel.shared
+                let vm = CompletionViewModel()
                 vm.completions = [
                     "test",
                     "testing",
@@ -151,7 +152,7 @@ struct CompletionListView_Previews: PreviewProvider {
 
             // Preview with no completions
             CompletionListView(viewModel: {
-                let vm = CompletionViewModel.shared
+                let vm = CompletionViewModel()
                 vm.completions = []
                 return vm
             }())

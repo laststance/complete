@@ -31,10 +31,6 @@ struct TextContext {
 /// Delegates to specialized managers for single responsibility
 class AccessibilityManager {
 
-    // MARK: - Singleton
-
-    static let shared = AccessibilityManager()
-
     // MARK: - Specialized Managers
 
     private let alertManager: AccessibilityAlertManager
@@ -42,7 +38,9 @@ class AccessibilityManager {
     private let elementExtractor: AccessibilityElementExtractor
     private let textInserter: AccessibilityTextInserter
 
-    private init() {
+    // MARK: - Initialization
+
+    init() {
         // Initialize in dependency order
         self.alertManager = AccessibilityAlertManager()
         self.permissionManager = AccessibilityPermissionManager(alertManager: alertManager)

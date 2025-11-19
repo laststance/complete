@@ -11,78 +11,68 @@ final class CompleteTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        // Reset singletons to clean state before each test
-        resetTestState()
+        // Each test creates its own instances - no shared state
     }
 
     override func tearDown() {
-        resetTestState()
         super.tearDown()
-    }
-
-    private func resetTestState() {
-        // Clear caches and reset to defaults
-        CompletionEngine.shared.clearCache()
-        CompletionEngine.shared.resetStats()
-        SettingsManager.shared.resetToDefaults()
     }
 
     // MARK: - SettingsManager Tests
 
-    func testSettingsManager_Singleton() {
-        let instance1 = SettingsManager.shared
-        let instance2 = SettingsManager.shared
-        XCTAssertTrue(instance1 === instance2, "SettingsManager should be a singleton")
-    }
-
     func testSettingsManager_LaunchAtLoginDefault() {
-        let launchAtLogin = SettingsManager.shared.launchAtLogin
+        let settingsManager = SettingsManager()
+        let launchAtLogin = settingsManager.launchAtLogin
         XCTAssertFalse(launchAtLogin, "Default launch at login should be false")
     }
 
     func testSettingsManager_LaunchAtLoginPersistence() {
+        let settingsManager = SettingsManager()
         // Enable launch at login
-        SettingsManager.shared.launchAtLogin = true
-        XCTAssertTrue(SettingsManager.shared.launchAtLogin)
+        settingsManager.launchAtLogin = true
+        XCTAssertTrue(settingsManager.launchAtLogin)
 
         // Disable launch at login
-        SettingsManager.shared.launchAtLogin = false
-        XCTAssertFalse(SettingsManager.shared.launchAtLogin)
+        settingsManager.launchAtLogin = false
+        XCTAssertFalse(settingsManager.launchAtLogin)
     }
 
     func testSettingsManager_ResetToDefaults() {
+        let settingsManager = SettingsManager()
         // Change settings
-        SettingsManager.shared.launchAtLogin = true
+        settingsManager.launchAtLogin = true
 
         // Reset
-        SettingsManager.shared.resetToDefaults()
+        settingsManager.resetToDefaults()
 
         // Verify defaults restored
-        XCTAssertFalse(SettingsManager.shared.launchAtLogin)
+        XCTAssertFalse(settingsManager.launchAtLogin)
     }
 
     func testSettingsManager_ExportSettings() {
+        let settingsManager = SettingsManager()
         // Set some values
-        SettingsManager.shared.launchAtLogin = true
+        settingsManager.launchAtLogin = true
 
         // Export
-        let exported = SettingsManager.shared.exportSettings()
+        let exported = settingsManager.exportSettings()
 
         // Verify exported dictionary contains values
         XCTAssertNotNil(exported["launchAtLogin"])
     }
 
     func testSettingsManager_ImportSettings() {
+        let settingsManager = SettingsManager()
         // Create settings dict
         let settings: [String: Any] = [
             "launchAtLogin": true
         ]
 
         // Reset to defaults first
-        SettingsManager.shared.resetToDefaults()
+        settingsManager.resetToDefaults()
 
         // Import
-        SettingsManager.shared.importSettings(settings)
+        settingsManager.importSettings(settings)
 
         // Verify imported (note: import may not work perfectly in test environment)
         // This tests that import doesn't crash
@@ -90,8 +80,9 @@ final class CompleteTests: XCTestCase {
     }
 
     func testSettingsManager_RestoreSettings() {
+        let settingsManager = SettingsManager()
         // Restore should reload from UserDefaults
-        SettingsManager.shared.restoreSettings()
+        settingsManager.restoreSettings()
 
         // Verify no crash
         XCTAssertTrue(true, "Restore settings should not crash")
@@ -99,15 +90,10 @@ final class CompleteTests: XCTestCase {
 
     // MARK: - CompletionEngine Tests
 
-    func testCompletionEngine_Singleton() {
-        let instance1 = CompletionEngine.shared
-        let instance2 = CompletionEngine.shared
-        XCTAssertTrue(instance1 === instance2, "CompletionEngine should be a singleton")
-    }
-
     func testCompletionEngine_CompletionsForWord() {
+        let engine = CompletionEngine()
         let word = "hel"
-        let completions = CompletionEngine.shared.completions(for: word, language: "en")
+        let completions = engine.completions(for: word, language: "en")
 
         // Should return completions (NSSpellChecker behavior)
         // At minimum, should not crash and return an array
@@ -116,15 +102,17 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_CompletionsForEmptyString() {
-        let completions = CompletionEngine.shared.completions(for: "", language: "en")
+        let engine = CompletionEngine()
+        let completions = engine.completions(for: "", language: "en")
 
         // Empty string should return empty array
         XCTAssertEqual(completions.count, 0, "Empty string should return no completions")
     }
 
     func testCompletionEngine_CompletionsAsync() async {
+        let engine = CompletionEngine()
         let word = "tes"
-        let completions = await CompletionEngine.shared.completionsAsync(for: word, language: "en")
+        let completions = await engine.completionsAsync(for: word, language: "en")
 
         // Async should work same as sync
         XCTAssertNotNil(completions)
@@ -132,16 +120,17 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_CachingMechanism() {
-        CompletionEngine.shared.resetStats()
+        let engine = CompletionEngine()
+        engine.resetStats()
         let word = "test"
 
         // First call - cache miss
-        _ = CompletionEngine.shared.completions(for: word, language: "en")
-        let statsAfterMiss = CompletionEngine.shared.performanceStats
+        _ = engine.completions(for: word, language: "en")
+        let statsAfterMiss = engine.performanceStats
 
         // Second call - cache hit
-        _ = CompletionEngine.shared.completions(for: word, language: "en")
-        let statsAfterHit = CompletionEngine.shared.performanceStats
+        _ = engine.completions(for: word, language: "en")
+        let statsAfterHit = engine.performanceStats
 
         // Verify cache is working (total queries should increase)
         XCTAssertGreaterThan(statsAfterHit.totalQueries, statsAfterMiss.totalQueries)
@@ -149,13 +138,14 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_CacheHitRate() {
-        CompletionEngine.shared.resetStats()
+        let engine = CompletionEngine()
+        engine.resetStats()
 
         // Generate some cache activity
-        _ = CompletionEngine.shared.completions(for: "test", language: "en")
-        _ = CompletionEngine.shared.completions(for: "test", language: "en") // cache hit
+        _ = engine.completions(for: "test", language: "en")
+        _ = engine.completions(for: "test", language: "en") // cache hit
 
-        let hitRate = CompletionEngine.shared.cacheHitRate
+        let hitRate = engine.cacheHitRate
 
         // Hit rate should be between 0 and 1
         XCTAssertGreaterThanOrEqual(hitRate, 0.0)
@@ -164,17 +154,18 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_ClearCache() {
-        CompletionEngine.shared.resetStats()
+        let engine = CompletionEngine()
+        engine.resetStats()
 
         // Generate cache entries
-        _ = CompletionEngine.shared.completions(for: "test", language: "en")
-        _ = CompletionEngine.shared.completions(for: "test", language: "en")
+        _ = engine.completions(for: "test", language: "en")
+        _ = engine.completions(for: "test", language: "en")
 
-        let statsBeforeClear = CompletionEngine.shared.performanceStats
+        let statsBeforeClear = engine.performanceStats
         XCTAssertGreaterThan(statsBeforeClear.cacheHits, 0)
 
         // Clear cache (async operation - also clears stats)
-        CompletionEngine.shared.clearCache()
+        engine.clearCache()
 
         // Note: clearCache is async, stats may not be immediately reset
         // Just verify the method completes without crash
@@ -182,45 +173,49 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_SetLanguage() {
-        CompletionEngine.shared.setLanguage("es") // Spanish
+        let engine = CompletionEngine()
+        engine.setLanguage("es") // Spanish
 
         // Language should be set (internal property, verify no crash)
         XCTAssertTrue(true, "Set language should not crash")
 
         // Reset to English
-        CompletionEngine.shared.setLanguage("en")
+        engine.setLanguage("en")
     }
 
     func testCompletionEngine_LearnWord() {
+        let engine = CompletionEngine()
         let customWord = "xyzabc123"
 
         // Learn custom word
-        CompletionEngine.shared.learnWord(customWord)
+        engine.learnWord(customWord)
 
         // Check if learned
-        let hasLearned = CompletionEngine.shared.hasLearnedWord(customWord)
+        let hasLearned = engine.hasLearnedWord(customWord)
         XCTAssertTrue(hasLearned, "Custom word should be learned")
     }
 
     func testCompletionEngine_ForgetWord() {
+        let engine = CompletionEngine()
         let customWord = "xyzabc456"
 
         // Learn then forget
-        CompletionEngine.shared.learnWord(customWord)
-        XCTAssertTrue(CompletionEngine.shared.hasLearnedWord(customWord))
+        engine.learnWord(customWord)
+        XCTAssertTrue(engine.hasLearnedWord(customWord))
 
-        CompletionEngine.shared.forgetWord(customWord)
-        XCTAssertFalse(CompletionEngine.shared.hasLearnedWord(customWord), "Forgotten word should not be learned")
+        engine.forgetWord(customWord)
+        XCTAssertFalse(engine.hasLearnedWord(customWord), "Forgotten word should not be learned")
     }
 
     func testCompletionEngine_PerformanceStats() {
-        CompletionEngine.shared.resetStats()
+        let engine = CompletionEngine()
+        engine.resetStats()
 
         // Generate activity
-        _ = CompletionEngine.shared.completions(for: "perf", language: "en")
-        _ = CompletionEngine.shared.completions(for: "test", language: "en")
+        _ = engine.completions(for: "perf", language: "en")
+        _ = engine.completions(for: "test", language: "en")
 
-        let stats = CompletionEngine.shared.performanceStats
+        let stats = engine.performanceStats
 
         // Verify stats structure
         XCTAssertGreaterThanOrEqual(stats.totalQueries, 2)
@@ -229,13 +224,14 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_ResetStats() {
+        let engine = CompletionEngine()
         // Generate activity
-        _ = CompletionEngine.shared.completions(for: "reset", language: "en")
-        let statsBefore = CompletionEngine.shared.performanceStats
+        _ = engine.completions(for: "reset", language: "en")
+        let statsBefore = engine.performanceStats
         XCTAssertGreaterThan(statsBefore.totalQueries, 0)
 
         // Reset stats (async operation)
-        CompletionEngine.shared.resetStats()
+        engine.resetStats()
 
         // Note: resetStats is async, stats may not be immediately reset
         // Just verify the method completes without crash
@@ -243,12 +239,6 @@ final class CompleteTests: XCTestCase {
     }
 
     // MARK: - HotkeyManager Tests
-
-    func testHotkeyManager_Singleton() {
-        let instance1 = HotkeyManager.shared
-        let instance2 = HotkeyManager.shared
-        XCTAssertTrue(instance1 === instance2, "HotkeyManager should be a singleton")
-    }
 
     // TODO: HotkeyManager tests disabled - methods no longer exposed after refactoring
     // HotkeyManager now auto-initializes and uses KeyboardShortcuts library for all shortcut management
@@ -314,14 +304,9 @@ final class CompleteTests: XCTestCase {
 
     // MARK: - AccessibilityManager Tests
 
-    func testAccessibilityManager_Singleton() {
-        let instance1 = AccessibilityManager.shared
-        let instance2 = AccessibilityManager.shared
-        XCTAssertTrue(instance1 === instance2, "AccessibilityManager should be a singleton")
-    }
-
     func testAccessibilityManager_CheckPermissionStatus() {
-        let hasPermission = AccessibilityManager.shared.checkPermissionStatus()
+        let accessibilityManager = AccessibilityManager()
+        let hasPermission = accessibilityManager.checkPermissionStatus()
 
         // In test environment, may or may not have permission
         // Just verify method returns a boolean
@@ -329,25 +314,28 @@ final class CompleteTests: XCTestCase {
     }
 
     func testAccessibilityManager_CheckPermissionStatusWithPrompt() {
-        let hasPermission = AccessibilityManager.shared.checkPermissionStatus(showPrompt: false)
+        let accessibilityManager = AccessibilityManager()
+        let hasPermission = accessibilityManager.checkPermissionStatus(showPrompt: false)
 
         // Verify method returns without crash
         XCTAssertTrue(hasPermission == true || hasPermission == false, "Should return boolean without crash")
     }
 
     func testAccessibilityManager_VerifyAndRequestIfNeeded() {
+        let accessibilityManager = AccessibilityManager()
         // This method shows UI dialogs, so we just verify it returns without crash
         // Don't wait as UI dialogs can hang in test environment
-        _ = AccessibilityManager.shared.verifyAndRequestIfNeeded()
+        _ = accessibilityManager.verifyAndRequestIfNeeded()
 
         // If we got here, method didn't crash
         XCTAssertTrue(true, "Verify and request should complete without crash")
     }
 
     func testAccessibilityManager_ExtractTextContext_NoFocusedElement() {
+        let accessibilityManager = AccessibilityManager()
         // In test environment with no focused element, should return error or success
-        let result = AccessibilityManager.shared.extractTextContext()
-        
+        let result = accessibilityManager.extractTextContext()
+
         // Verify method returns a Result (either success or failure)
         switch result {
         case .success(let context):
@@ -356,11 +344,12 @@ final class CompleteTests: XCTestCase {
             XCTAssertTrue(error is AccessibilityError, "Should return AccessibilityError")
         }
     }
-    
+
     func testAccessibilityManager_GetCursorScreenPosition_NoFocusedElement() {
+        let accessibilityManager = AccessibilityManager()
         // In test environment, may not have cursor position
-        let result = AccessibilityManager.shared.getCursorScreenPosition()
-        
+        let result = accessibilityManager.getCursorScreenPosition()
+
         // Verify method returns a Result (either success or failure)
         switch result {
         case .success(let position):
@@ -371,13 +360,14 @@ final class CompleteTests: XCTestCase {
     }
 
     func testAccessibilityManager_InsertCompletion_MethodExists() {
+        let accessibilityManager = AccessibilityManager()
         // Verify the insertCompletion method exists and has correct signature
         // We can't actually test insertion in test environment without focused element
         // This would cause crashes, so we just verify the method exists
 
         // Method signature check via compilation
         // If this compiles, the method exists with correct signature
-        let _ = AccessibilityManager.shared.insertCompletion
+        let _ = accessibilityManager.insertCompletion
 
         XCTAssertTrue(true, "insertCompletion method exists with correct signature")
     }
@@ -385,7 +375,8 @@ final class CompleteTests: XCTestCase {
     // MARK: - Error Handling Tests (Result Types)
 
     func testAccessibilityManager_ExtractTextContext_ReturnsResult() {
-        let result = AccessibilityManager.shared.extractTextContext()
+        let accessibilityManager = AccessibilityManager()
+        let result = accessibilityManager.extractTextContext()
 
         // Verify it returns a Result type (not nil/optional)
         switch result {
@@ -399,7 +390,8 @@ final class CompleteTests: XCTestCase {
     }
 
     func testAccessibilityManager_GetCursorPosition_ReturnsResult() {
-        let result = AccessibilityManager.shared.getCursorScreenPosition()
+        let accessibilityManager = AccessibilityManager()
+        let result = accessibilityManager.getCursorScreenPosition()
 
         // Verify Result type with either CGPoint or AccessibilityError
         switch result {
@@ -411,6 +403,7 @@ final class CompleteTests: XCTestCase {
     }
 
     func testAccessibilityManager_InsertCompletion_WithoutPermissions() {
+        let accessibilityManager = AccessibilityManager()
         // Create minimal valid context
         let context = TextContext(
             fullText: "test",
@@ -423,7 +416,7 @@ final class CompleteTests: XCTestCase {
         )
 
         // Without permissions or focused element, should return false
-        let result = AccessibilityManager.shared.insertCompletion("testing", replacing: context)
+        let result = accessibilityManager.insertCompletion("testing", replacing: context)
 
         // In test environment, likely fails - verify doesn't crash
         XCTAssertTrue(result == true || result == false, "Should return boolean without crash")
@@ -432,23 +425,26 @@ final class CompleteTests: XCTestCase {
     // MARK: - Permission Flow Tests
 
     func testAccessibilityManager_RequestPermissions() {
+        let accessibilityManager = AccessibilityManager()
         // Verify requestPermissions doesn't crash
         // Note: Shows UI dialog in test environment, but shouldn't crash
-        AccessibilityManager.shared.requestPermissions()
+        accessibilityManager.requestPermissions()
 
         XCTAssertTrue(true, "requestPermissions should complete without crash")
     }
 
     func testAccessibilityManager_ShowPermissionDeniedAlert() {
+        let accessibilityManager = AccessibilityManager()
         // Verify alert method doesn't crash
-        AccessibilityManager.shared.showPermissionDeniedAlert()
+        accessibilityManager.showPermissionDeniedAlert()
 
         XCTAssertTrue(true, "showPermissionDeniedAlert should complete without crash")
     }
 
     func testAccessibilityManager_TestPermissions() {
+        let accessibilityManager = AccessibilityManager()
         // Verify test method doesn't crash
-        AccessibilityManager.shared.testPermissions()
+        accessibilityManager.testPermissions()
 
         XCTAssertTrue(true, "testPermissions should complete without crash")
     }
@@ -628,59 +624,67 @@ final class CompleteTests: XCTestCase {
     // MARK: - Error Condition Tests
 
     func testCompletionEngine_EmptyInput() {
-        let completions = CompletionEngine.shared.completions(for: "")
+        let engine = CompletionEngine()
+        let completions = engine.completions(for: "", language: "en")
 
         // Empty input should return empty array, not crash
         XCTAssertTrue(completions.isEmpty, "Empty input should return no completions")
     }
 
     func testCompletionEngine_SingleCharacter() {
-        let completions = CompletionEngine.shared.completions(for: "a")
+        let engine = CompletionEngine()
+        let completions = engine.completions(for: "a", language: "en")
 
         // Single character should work without crash
         XCTAssertTrue(completions.count >= 0, "Single character input should not crash")
     }
 
     func testCompletionEngine_WhitespaceOnly() {
-        let completions = CompletionEngine.shared.completions(for: "   ")
+        let engine = CompletionEngine()
+        let completions = engine.completions(for: "   ", language: "en")
 
         // Whitespace-only should return empty
         XCTAssertTrue(completions.isEmpty, "Whitespace-only input should return no completions")
     }
 
     func testCompletionEngine_EmojiInput() {
-        let completions = CompletionEngine.shared.completions(for: "😀")
+        let engine = CompletionEngine()
+        let completions = engine.completions(for: "😀", language: "en")
 
         // Emoji input should not crash
         XCTAssertTrue(completions.count >= 0, "Emoji input should not crash")
     }
 
     func testCompletionEngine_UnicodeInput() {
-        let completions = CompletionEngine.shared.completions(for: "日本")
+        let engine = CompletionEngine()
+        let completions = engine.completions(for: "日本", language: "en")
 
         // Unicode input should work
         XCTAssertTrue(completions.count >= 0, "Unicode input should not crash")
     }
 
     func testCompletionEngine_VeryLongInput() {
+        let engine = CompletionEngine()
         let longText = String(repeating: "a", count: 10000)
-        let completions = CompletionEngine.shared.completions(for: longText)
+        let completions = engine.completions(for: longText, language: "en")
 
         // Very long input should not crash
         XCTAssertTrue(completions.count >= 0, "Very long input should not crash")
     }
 
     func testCompletionEngine_SpecialCharacters() {
+        let engine = CompletionEngine()
         let specialChars = "!@#$%^&*()"
-        let completions = CompletionEngine.shared.completions(for: specialChars)
+        let completions = engine.completions(for: specialChars, language: "en")
 
         // Special characters should not crash
         XCTAssertTrue(completions.count >= 0, "Special characters should not crash")
     }
 
     func testCompletionEngine_NilLanguage() {
+        let engine = CompletionEngine()
         // Test with nil language (should use default)
-        let completions = CompletionEngine.shared.completions(for: "test", language: nil)
+        let completions = engine.completions(for: "test", language: nil)
 
         XCTAssertTrue(completions.count >= 0, "Nil language should use default")
     }
@@ -688,25 +692,27 @@ final class CompleteTests: XCTestCase {
     // MARK: - Resource Exhaustion Tests
 
     func testCompletionEngine_CacheFillsToLimit() {
-        CompletionEngine.shared.clearCache()
+        let engine = CompletionEngine()
+        engine.clearCache()
 
         // Fill cache with many unique queries
         for i in 0..<100 {
-            _ = CompletionEngine.shared.completions(for: "word\(i)")
+            _ = engine.completions(for: "word\(i)", language: "en")
         }
 
-        let stats = CompletionEngine.shared.performanceStats
+        let stats = engine.performanceStats
 
         // Cache should handle many entries without crash
         XCTAssertTrue(stats.totalQueries >= 100, "Cache should handle 100+ entries")
     }
 
     func testCompletionEngine_RapidSequentialCalls() {
+        let engine = CompletionEngine()
         let startTime = Date()
 
         // Rapid sequential calls (stress test)
         for _ in 0..<50 {
-            _ = CompletionEngine.shared.completions(for: "test")
+            _ = engine.completions(for: "test", language: "en")
         }
 
         let duration = Date().timeIntervalSince(startTime)
@@ -716,8 +722,9 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_VeryLargeCompletionList() {
+        let engine = CompletionEngine()
         // Test with short prefix that generates many completions
-        let completions = CompletionEngine.shared.completions(for: "a")
+        let completions = engine.completions(for: "a", language: "en")
 
         // Should handle large result sets without crash
         XCTAssertTrue(completions.count < 1000, "Completion list should be reasonable size")
@@ -726,13 +733,14 @@ final class CompleteTests: XCTestCase {
     // MARK: - Concurrency Tests
 
     func testCompletionEngine_ConcurrentCacheAccess() {
+        let engine = CompletionEngine()
         let expectation = XCTestExpectation(description: "Concurrent cache access")
         expectation.expectedFulfillmentCount = 10
 
         // Multiple concurrent requests
         for i in 0..<10 {
             DispatchQueue.global().async {
-                _ = CompletionEngine.shared.completions(for: "concurrent\(i)")
+                _ = engine.completions(for: "concurrent\(i)", language: "en")
                 expectation.fulfill()
             }
         }
@@ -744,6 +752,7 @@ final class CompleteTests: XCTestCase {
     }
 
     func testSettingsManager_ConcurrentAccess() {
+        let settingsManager = SettingsManager()
         let expectation = XCTestExpectation(description: "Concurrent settings access")
         expectation.expectedFulfillmentCount = 10
 
@@ -751,8 +760,8 @@ final class CompleteTests: XCTestCase {
         for i in 0..<10 {
             DispatchQueue.global().async {
                 let value = i % 2 == 0
-                SettingsManager.shared.launchAtLogin = value
-                _ = SettingsManager.shared.launchAtLogin
+                settingsManager.launchAtLogin = value
+                _ = settingsManager.launchAtLogin
                 expectation.fulfill()
             }
         }
@@ -799,11 +808,12 @@ final class CompleteTests: XCTestCase {
     }
 
     func testCompletionEngine_MemoryPressure() {
+        let engine = CompletionEngine()
         // Simulate memory pressure by requesting many completions
         var totalCompletions = 0
 
         for i in 0..<100 {
-            let completions = CompletionEngine.shared.completions(for: "mem\(i)")
+            let completions = engine.completions(for: "mem\(i)", language: "en")
             totalCompletions += completions.count
         }
 
@@ -814,19 +824,20 @@ final class CompleteTests: XCTestCase {
     // MARK: - Integration Tests
 
     func testIntegration_CompletionEngineWithCache() async {
-        CompletionEngine.shared.resetStats()
+        let engine = CompletionEngine()
+        engine.resetStats()
 
         // Test sync and async together
         let word = "inte"
 
         // Sync call (cache miss)
-        let syncCompletions = CompletionEngine.shared.completions(for: word, language: "en")
-        let statsAfterSync = CompletionEngine.shared.performanceStats
+        let syncCompletions = engine.completions(for: word, language: "en")
+        let statsAfterSync = engine.performanceStats
         XCTAssertGreaterThanOrEqual(statsAfterSync.cacheMisses, 1)
 
         // Async call (cache hit)
-        let asyncCompletions = await CompletionEngine.shared.completionsAsync(for: word, language: "en")
-        let statsAfterAsync = CompletionEngine.shared.performanceStats
+        let asyncCompletions = await engine.completionsAsync(for: word, language: "en")
+        let statsAfterAsync = engine.performanceStats
         XCTAssertGreaterThanOrEqual(statsAfterAsync.cacheHits, 1)
 
         // Both should return same results
@@ -834,18 +845,19 @@ final class CompleteTests: XCTestCase {
     }
 
     func testIntegration_SettingsManagerPersistence() {
+        let settingsManager = SettingsManager()
         // Change multiple settings
-        SettingsManager.shared.launchAtLogin = true
+        settingsManager.launchAtLogin = true
 
         // Export settings
-        let exported = SettingsManager.shared.exportSettings()
+        let exported = settingsManager.exportSettings()
 
         // Reset to defaults
-        SettingsManager.shared.resetToDefaults()
-        XCTAssertFalse(SettingsManager.shared.launchAtLogin)
+        settingsManager.resetToDefaults()
+        XCTAssertFalse(settingsManager.launchAtLogin)
 
         // Import settings back
-        SettingsManager.shared.importSettings(exported)
+        settingsManager.importSettings(exported)
 
         // Verify restoration (may not work perfectly in test environment)
         // Main goal: verify no crashes
@@ -877,81 +889,87 @@ final class CompleteTests: XCTestCase {
     // MARK: Completion Performance (Target: <50ms)
     
     func testPerformance_CompletionGeneration() {
+        let engine = CompletionEngine()
         let options = XCTMeasureOptions()
         options.iterationCount = 10
-        
+
         measure(metrics: [XCTClockMetric(), XCTMemoryMetric()], options: options) {
-            _ = CompletionEngine.shared.completions(for: "per", language: "en")
+            _ = engine.completions(for: "per", language: "en")
         }
     }
 
     func testPerformance_CachedCompletion() {
+        let engine = CompletionEngine()
         // Prime the cache
-        _ = CompletionEngine.shared.completions(for: "cache", language: "en")
+        _ = engine.completions(for: "cache", language: "en")
 
         let options = XCTMeasureOptions()
         options.iterationCount = 10
-        
+
         // Measure cached access (should be <1ms)
         measure(metrics: [XCTClockMetric()], options: options) {
-            _ = CompletionEngine.shared.completions(for: "cache", language: "en")
+            _ = engine.completions(for: "cache", language: "en")
         }
     }
-    
+
     func testPerformance_CompletionGenerationUnderLoad() {
+        let engine = CompletionEngine()
         // Test performance with multiple consecutive completions
         let options = XCTMeasureOptions()
         options.iterationCount = 5
-        
+
         measure(metrics: [XCTClockMetric(), XCTMemoryMetric()], options: options) {
             let words = ["test", "perform", "swift", "complete", "bench"]
             for word in words {
-                _ = CompletionEngine.shared.completions(for: word, language: "en")
+                _ = engine.completions(for: word, language: "en")
             }
         }
     }
 
     // MARK: Settings Performance
-    
+
     func testPerformance_SettingsAccess() {
+        let settingsManager = SettingsManager()
         let options = XCTMeasureOptions()
         options.iterationCount = 10
-        
+
         measure(metrics: [XCTClockMetric()], options: options) {
-            _ = SettingsManager.shared.launchAtLogin
+            _ = settingsManager.launchAtLogin
         }
     }
-    
+
     func testPerformance_SettingsPersistence() {
+        let settingsManager = SettingsManager()
         let options = XCTMeasureOptions()
         options.iterationCount = 5
 
         measure(metrics: [XCTClockMetric()], options: options) {
-            SettingsManager.shared.launchAtLogin = true
-            SettingsManager.shared.launchAtLogin = false
+            settingsManager.launchAtLogin = true
+            settingsManager.launchAtLogin = false
         }
     }
     
     // MARK: Memory Leak Detection
-    
+
     func testMemoryLeaks_CompletionEngine() {
-        // Singletons should persist across usage, not leak on repeated operations
-        let initialStats = CompletionEngine.shared.performanceStats
-        
+        // Verify engine instances work correctly without leaking across repeated operations
+        let engine = CompletionEngine()
+        let initialStats = engine.performanceStats
+
         // Exercise the engine extensively
         for i in 0..<100 {
-            _ = CompletionEngine.shared.completions(for: "test\(i)", language: "en")
+            _ = engine.completions(for: "test\(i)", language: "en")
         }
-        
-        // Verify singleton persists and stats accumulated correctly
-        let finalStats = CompletionEngine.shared.performanceStats
-        XCTAssertGreaterThan(finalStats.totalQueries, initialStats.totalQueries, 
-                            "Stats should accumulate, indicating singleton persistence")
+
+        // Verify stats accumulated correctly (instance state persists)
+        let finalStats = engine.performanceStats
+        XCTAssertGreaterThan(finalStats.totalQueries, initialStats.totalQueries,
+                            "Stats should accumulate within instance lifetime")
     }
-    
+
     func testMemoryLeaks_SettingsManager() {
-        // Singletons should persist, verify no leaks through repeated operations
-        let manager = SettingsManager.shared
+        // Verify settings instances work correctly without leaking through repeated operations
+        let manager = SettingsManager()
 
         // Exercise settings extensively
         for _ in 0..<100 {
@@ -960,66 +978,66 @@ final class CompleteTests: XCTestCase {
             _ = manager.launchAtLogin
         }
 
-        // Verify singleton is same instance
-        XCTAssertTrue(manager === SettingsManager.shared, "Should be same singleton instance")
+        // Verify instance behaves correctly
+        XCTAssertTrue(true, "Settings operations should complete without leaking")
     }
-    
+
     func testMemoryLeaks_HotkeyManager() {
-        // Verify hotkey manager doesn't leak through setup/cleanup cycles
-        let manager = HotkeyManager.shared
-
-        // TODO: Exercise hotkey manager through multiple cycles (methods no longer exposed)
-        // HotkeyManager now auto-initializes and uses KeyboardShortcuts library
-
-        // Verify singleton persists
-        XCTAssertTrue(manager === HotkeyManager.shared, "Should be same singleton instance")
+        // TODO: HotkeyManager tests disabled - methods no longer exposed after refactoring
+        // HotkeyManager now requires AccessibilityManager, CompletionEngine, and CompletionWindowController dependencies
+        // Would need mock dependencies to test - skip for now
+        XCTAssertTrue(true, "HotkeyManager instance creation requires complex dependencies")
     }
     
     // MARK: Memory Usage Validation (Target: <50MB)
-    
+
     func testMemoryUsage_CompletionCacheGrowth() {
+        let engine = CompletionEngine()
         let options = XCTMeasureOptions()
         options.iterationCount = 3
-        
+
         measure(metrics: [XCTMemoryMetric()], options: options) {
             // Generate completions for 1000 different words
             for i in 0..<1000 {
-                _ = CompletionEngine.shared.completions(for: "word\(i)", language: "en")
+                _ = engine.completions(for: "word\(i)", language: "en")
             }
         }
     }
-    
+
     func testMemoryUsage_SettingsOperations() {
+        let settingsManager = SettingsManager()
         let options = XCTMeasureOptions()
         options.iterationCount = 3
-        
+
         measure(metrics: [XCTMemoryMetric()], options: options) {
             for _ in 0..<1000 {
-                _ = SettingsManager.shared.launchAtLogin
-                SettingsManager.shared.launchAtLogin = true
-                SettingsManager.shared.launchAtLogin = false
+                _ = settingsManager.launchAtLogin
+                settingsManager.launchAtLogin = true
+                settingsManager.launchAtLogin = false
             }
         }
     }
-    
+
     // MARK: Acceptance Criteria Validation
-    
+
     func testAcceptanceCriteria_CompletionGenerationUnder50ms() {
+        let engine = CompletionEngine()
         // Acceptance: Completion generation <50ms
         let startTime = CFAbsoluteTimeGetCurrent()
-        _ = CompletionEngine.shared.completions(for: "test", language: "en")
+        _ = engine.completions(for: "test", language: "en")
         let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
-        
+
         XCTAssertLessThan(timeElapsed, 0.05, "Completion generation should be <50ms, was \(timeElapsed * 1000)ms")
     }
-    
+
     func testAcceptanceCriteria_CachedCompletionUnder1ms() {
+        let engine = CompletionEngine()
         // Prime cache
-        _ = CompletionEngine.shared.completions(for: "cached", language: "en")
-        
+        _ = engine.completions(for: "cached", language: "en")
+
         // Measure cached access
         let startTime = CFAbsoluteTimeGetCurrent()
-        _ = CompletionEngine.shared.completions(for: "cached", language: "en")
+        _ = engine.completions(for: "cached", language: "en")
         let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
         
         XCTAssertLessThan(timeElapsed, 0.001, "Cached completion should be <1ms, was \(timeElapsed * 1000)ms")

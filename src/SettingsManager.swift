@@ -6,10 +6,6 @@ import os.log
 /// Provides UserDefaults-based persistence for user preferences
 class SettingsManager {
 
-    // MARK: - Singleton
-
-    static let shared = SettingsManager()
-
     // MARK: - UserDefaults Keys
 
     private enum Keys {
@@ -23,7 +19,7 @@ class SettingsManager {
 
     // MARK: - Initialization
 
-    private init() {
+    init() {
         // Register default values on first launch
         registerDefaults()
     }

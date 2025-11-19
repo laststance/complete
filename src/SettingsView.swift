@@ -6,7 +6,13 @@ struct SettingsView: View {
 
     // MARK: - Properties
 
-    @ObservedObject private var settingsManager = SettingsManagerObservable.shared
+    @ObservedObject private var settingsManager: SettingsManagerObservable
+
+    // MARK: - Initialization
+
+    init(settingsManager: SettingsManagerObservable) {
+        self.settingsManager = settingsManager
+    }
 
     // MARK: - Constants
 
@@ -112,10 +118,7 @@ struct SettingsView: View {
         let response = alert.runModal()
 
         if response == .alertFirstButtonReturn {
-            SettingsManager.shared.resetToDefaults()
-
-            // Update observable
-            settingsManager.refreshFromManager()
+            settingsManager.resetToDefaults()
         }
     }
 }
@@ -127,22 +130,29 @@ struct SettingsView: View {
 @MainActor
 class SettingsManagerObservable: ObservableObject {
 
-    static let shared = SettingsManagerObservable()
+    private let settingsManager: SettingsManaging
 
     @Published var launchAtLogin: Bool {
         didSet {
-            SettingsManager.shared.launchAtLogin = launchAtLogin
+            settingsManager.launchAtLogin = launchAtLogin
         }
     }
 
-    private init() {
+    init(settingsManager: SettingsManaging) {
+        self.settingsManager = settingsManager
         // Initialize from SettingsManager
-        self.launchAtLogin = SettingsManager.shared.launchAtLogin
+        self.launchAtLogin = settingsManager.launchAtLogin
     }
 
     /// Refresh values from SettingsManager (after reset)
     func refreshFromManager() {
-        launchAtLogin = SettingsManager.shared.launchAtLogin
+        launchAtLogin = settingsManager.launchAtLogin
+    }
+
+    /// Reset to default values
+    func resetToDefaults() {
+        settingsManager.resetToDefaults()
+        refreshFromManager()
     }
 }
 
@@ -151,7 +161,9 @@ class SettingsManagerObservable: ObservableObject {
 #if DEBUG
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
-        SettingsView()
+        let manager = SettingsManager()
+        let observable = SettingsManagerObservable(settingsManager: manager)
+        SettingsView(settingsManager: observable)
             .frame(width: 450, height: 400)
     }
 }

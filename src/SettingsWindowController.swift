@@ -5,17 +5,15 @@ import os.log
 /// Window controller for the settings/preferences window
 class SettingsWindowController: NSWindowController {
 
-    // MARK: - Singleton
-
-    static let shared = SettingsWindowController()
-
     // MARK: - Properties
 
+    private let settingsManager: SettingsManaging
     private var hostingController: NSHostingController<SettingsView>?
 
     // MARK: - Initialization
 
-    private init() {
+    init(settingsManager: SettingsManaging) {
+        self.settingsManager = settingsManager
         // Create settings window
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 450, height: 400),
@@ -47,7 +45,8 @@ class SettingsWindowController: NSWindowController {
 
     /// Set up SwiftUI hosting controller
     private func setupSwiftUIContent() {
-        let settingsView = SettingsView()
+        let observable = SettingsManagerObservable(settingsManager: settingsManager)
+        let settingsView = SettingsView(settingsManager: observable)
         let hosting = NSHostingController(rootView: settingsView)
 
         window?.contentViewController = hosting

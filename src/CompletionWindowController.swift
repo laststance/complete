@@ -13,14 +13,12 @@ class KeyablePanel: NSPanel {
 /// Manages an always-on-top, borderless NSPanel for displaying completions
 class CompletionWindowController: NSWindowController {
 
-    // MARK: - Singleton
-
-    static let shared = CompletionWindowController()
-
     // MARK: - Properties
 
+    private let accessibilityManager: AccessibilityManaging
+
     /// View model managing completion state
-    private let viewModel = CompletionViewModel.shared
+    private let viewModel = CompletionViewModel()
 
     /// Hosting controller for SwiftUI content
     private var hostingController: NSHostingController<CompletionListView>?
@@ -31,7 +29,8 @@ class CompletionWindowController: NSWindowController {
 
     // MARK: - Initialization
 
-    private init() {
+    init(accessibilityManager: AccessibilityManaging) {
+        self.accessibilityManager = accessibilityManager
         // Create borderless, floating panel with narrow width for vertical list
         let panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 220, height: 400),
@@ -70,7 +69,12 @@ class CompletionWindowController: NSWindowController {
 
     /// Set up SwiftUI hosting controller
     private func setupSwiftUIContent() {
-        let completionListView = CompletionListView(viewModel: viewModel)
+        let completionListView = CompletionListView(
+            viewModel: viewModel,
+            onSelection: { [weak self] in
+                self?.handleMouseSelection()
+            }
+        )
         let hosting = NSHostingController(rootView: completionListView)
 
         // Configure hosting controller
@@ -448,7 +452,7 @@ class CompletionWindowController: NSWindowController {
                 os_log("⚠️  Target app not yet active, proceeding anyway...", log: .ui, type: .info)
             }
 
-            let success = AccessibilityManager.shared.insertCompletion(
+            let success = accessibilityManager.insertCompletion(
                 selectedText,
                 replacing: context
             )

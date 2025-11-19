@@ -24,15 +24,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Main menu for status bar
     private var statusMenu: NSMenu?
 
+    /// Settings window controller (owned instance, not singleton)
+    private let settingsWindowController: SettingsWindowController
+
+    /// Completion window controller (owned instance, not singleton)
+    private let completionWindowController: CompletionWindowController
+
+    /// Hotkey manager (owned instance, not singleton)
+    private let hotkeyManager: HotkeyManager
+
     // MARK: - Initialization
 
     override init() {
-        // Initialize managed dependencies
-        // Note: We still use .shared here as a temporary bridge during migration
-        // Future work: Create new instances and inject them throughout the app
-        self.settingsManager = SettingsManager.shared
-        self.completionEngine = CompletionEngine.shared
-        self.accessibilityManager = AccessibilityManager.shared
+        // Initialize managed dependencies - create new instances
+        self.settingsManager = SettingsManager()
+        self.completionEngine = CompletionEngine()
+        self.accessibilityManager = AccessibilityManager()
+
+        // Initialize window controllers with injected dependencies
+        self.settingsWindowController = SettingsWindowController(settingsManager: settingsManager)
+        self.completionWindowController = CompletionWindowController(accessibilityManager: accessibilityManager)
+
+        // Initialize hotkey manager with all dependencies
+        self.hotkeyManager = HotkeyManager(
+            accessibilityManager: accessibilityManager,
+            completionEngine: completionEngine,
+            completionWindowController: completionWindowController
+        )
 
         super.init()
     }
@@ -85,8 +103,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set up global hotkey manager
     /// Only called after accessibility permissions are verified
     private func setupHotkeyManager() {
-        // HotkeyManager auto-initializes in init()
-        _ = HotkeyManager.shared
+        // HotkeyManager already initialized in init() with proper dependencies
+        // No action needed - just log confirmation
 
         os_log("✅ Hotkey manager initialized", log: .app, type: .info)
     }
@@ -152,7 +170,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Menu Actions
 
     @objc private func openSettings() {
-        SettingsWindowController.shared.show()
+        settingsWindowController.show()
     }
 
     @objc private func showAbout() {

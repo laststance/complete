@@ -6,10 +6,6 @@ import SwiftUI
 @MainActor
 class CompletionViewModel: ObservableObject {
 
-    // MARK: - Singleton
-
-    static let shared = CompletionViewModel()
-
     // MARK: - Published Properties
 
     /// Array of completion strings to display
@@ -23,8 +19,8 @@ class CompletionViewModel: ObservableObject {
 
     // MARK: - Initialization
 
-    private init() {
-        // Private initializer for singleton
+    init() {
+        // Public initializer for dependency injection
     }
 
     // MARK: - Selection Methods

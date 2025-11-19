@@ -6,10 +6,22 @@ import os.log
 /// Uses KeyboardShortcuts library for cross-platform hotkey support
 class HotkeyManager {
 
-    /// Singleton instance
-    static let shared = HotkeyManager()
+    // MARK: - Properties
 
-    private init() {
+    private let accessibilityManager: AccessibilityManaging
+    private let completionEngine: CompletionProviding
+    private let completionWindowController: CompletionWindowController
+
+    // MARK: - Initialization
+
+    init(
+        accessibilityManager: AccessibilityManaging,
+        completionEngine: CompletionProviding,
+        completionWindowController: CompletionWindowController
+    ) {
+        self.accessibilityManager = accessibilityManager
+        self.completionEngine = completionEngine
+        self.completionWindowController = completionWindowController
         setupHotkey()
     }
 
@@ -38,9 +50,9 @@ class HotkeyManager {
 
         // Phase 1: Check accessibility permissions
         os_log("Phase 1: Checking accessibility permissions", log: .hotkey, type: .debug)
-        guard AccessibilityManager.shared.checkPermissionStatus() else {
+        guard accessibilityManager.checkPermissionStatus() else {
             os_log("Accessibility permissions not granted", log: .hotkey, type: .error)
-            AccessibilityManager.shared.showPermissionDeniedAlert()
+            accessibilityManager.showPermissionDeniedAlert()
             return
         }
         os_log("Accessibility permissions verified", log: .hotkey, type: .debug)
@@ -56,7 +68,7 @@ class HotkeyManager {
         // Phase 3: Extract text at cursor position
         os_log("Phase 3: Extracting text context", log: .hotkey, type: .debug)
         let textContext: TextContext
-        switch AccessibilityManager.shared.extractTextContext() {
+        switch accessibilityManager.extractTextContext() {
         case .success(let context):
             textContext = context
         case .failure(let error):
@@ -71,7 +83,7 @@ class HotkeyManager {
 
         // Phase 4: Generate completion suggestions based on textContext
         os_log("Phase 4: Generating completions", log: .hotkey, type: .debug)
-        let completions = CompletionEngine.shared.completions(for: textContext.wordAtCursor)
+        let completions = completionEngine.completions(for: textContext.wordAtCursor, language: nil)
 
         if completions.isEmpty {
             os_log("No completions found for: %{private}@", log: .hotkey, type: .info, textContext.wordAtCursor)
@@ -86,7 +98,7 @@ class HotkeyManager {
 
         // Get cursor screen position for accurate window placement
         let cursorPosition: CGPoint
-        switch AccessibilityManager.shared.getCursorScreenPosition() {
+        switch accessibilityManager.getCursorScreenPosition(from: nil) {
         case .success(let position):
             cursorPosition = position
             os_log("Cursor position: (%.1f, %.1f)", log: .hotkey, type: .debug, position.x, position.y)
@@ -97,7 +109,7 @@ class HotkeyManager {
 
         // Phase 5: Show completion window with suggestions at cursor position
         Task { @MainActor in
-            CompletionWindowController.shared.show(
+            completionWindowController.show(
                 completions: completions,
                 textContext: textContext,
                 near: cursorPosition

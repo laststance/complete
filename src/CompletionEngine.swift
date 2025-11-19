@@ -12,10 +12,6 @@ import AppKit
 /// - Async completion generation
 final class CompletionEngine {
 
-    // MARK: - Singleton
-
-    static let shared = CompletionEngine()
-
     // MARK: - Properties
 
     private let spellChecker: NSSpellChecker
@@ -43,7 +39,7 @@ final class CompletionEngine {
 
     // MARK: - Initialization
 
-    private init() {
+    init() {
         self.spellChecker = NSSpellChecker.shared
         self.completionCache = NSCache<NSString, NSArray>()
 
