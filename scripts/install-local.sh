@@ -9,7 +9,11 @@
 # Options:
 #   --debug          Build in debug mode (default: release)
 #   --no-install     Create .app but don't install to /Applications
+#   --sign [NAME]    Sign with certificate (maintains accessibility permissions)
 #   --help           Show this help message
+#
+# Note: Without --sign, accessibility permissions must be re-granted after each rebuild.
+#       Create a self-signed certificate in Keychain Access for consistent permissions.
 #
 
 set -e  # Exit on error
@@ -19,6 +23,7 @@ set -u  # Exit on undefined variable
 APP_NAME="Complete"
 BUILD_CONFIG="release"
 INSTALL_TO_APPLICATIONS=true
+SIGN_IDENTITY=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -60,6 +65,19 @@ while [[ $# -gt 0 ]]; do
         --no-install)
             INSTALL_TO_APPLICATIONS=false
             shift
+            ;;
+        --sign)
+            if [[ $# -gt 1 && ! "$2" =~ ^-- ]]; then
+                SIGN_IDENTITY="$2"
+                shift 2
+            else
+                # Auto-detect first available code signing identity
+                SIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep -oE '"[^"]+"' | head -1 | tr -d '"' || echo "")
+                if [ -z "$SIGN_IDENTITY" ]; then
+                    print_error "No code signing identity found. Create a self-signed certificate in Keychain Access."
+                fi
+                shift
+            fi
             ;;
         --help)
             show_help
@@ -126,7 +144,28 @@ chmod +x "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
 print_success "Permissions set"
 
-# Step 5: Install to /Applications (optional)
+# Step 5: Code sign (optional but recommended)
+if [ -n "$SIGN_IDENTITY" ]; then
+    print_step "Signing app bundle with: ${SIGN_IDENTITY}..."
+    
+    codesign --force --deep --sign "$SIGN_IDENTITY" "${APP_BUNDLE}" 2>&1 || {
+        print_warning "Code signing failed. Continuing without signature."
+        SIGN_IDENTITY=""
+    }
+    
+    if [ -n "$SIGN_IDENTITY" ]; then
+        print_success "App signed successfully"
+        
+        # Verify signature
+        if codesign --verify --deep --strict "${APP_BUNDLE}" 2>/dev/null; then
+            print_success "Signature verified"
+        else
+            print_warning "Signature verification failed (app will still work)"
+        fi
+    fi
+fi
+
+# Step 6: Install to /Applications (optional)
 if [ "$INSTALL_TO_APPLICATIONS" = true ]; then
     print_step "Installing to /Applications..."
 
@@ -160,6 +199,15 @@ echo ""
 
 if [ "$INSTALL_TO_APPLICATIONS" = true ]; then
     echo "📍 Location: /Applications/${APP_NAME}.app"
+    if [ -n "$SIGN_IDENTITY" ]; then
+        echo "🔏 Signed with: ${SIGN_IDENTITY}"
+        echo ""
+        echo "✨ Accessibility permissions will persist across rebuilds!"
+    else
+        echo ""
+        echo "⚠️  Unsigned: Re-grant accessibility permissions after each rebuild"
+        echo "   Use --sign to maintain permissions: ./install-local.sh --sign"
+    fi
     echo ""
     echo "🚀 Next Steps:"
     echo "   1. Launch via Spotlight: Cmd+Space → 'Complete' → Enter"
