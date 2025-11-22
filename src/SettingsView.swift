@@ -79,16 +79,35 @@ struct SettingsView: View {
 
     private var hotkeySettings: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Primary shortcut
             HStack {
-                Text("Trigger Shortcut:")
+                Text("Primary Shortcut:")
                     .frame(width: labelWidth, alignment: .trailing)
 
                 KeyboardShortcuts.Recorder(for: .completionTrigger)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .help("Press keys to set a new shortcut for triggering completions")
+            .help("Press keys to set the primary shortcut for triggering completions")
 
             Text("Default: ⌃I (Control+I)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.leading, labelWidth + 8)
+            
+            Divider()
+                .padding(.vertical, 4)
+            
+            // Secondary shortcut
+            HStack {
+                Text("Secondary Shortcut:")
+                    .frame(width: labelWidth, alignment: .trailing)
+
+                KeyboardShortcuts.Recorder(for: .completionTrigger2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .help("Press keys to set an optional secondary shortcut")
+
+            Text("Optional: Set a second shortcut for convenience")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.leading, labelWidth + 8)

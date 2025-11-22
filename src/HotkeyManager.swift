@@ -29,15 +29,23 @@ class HotkeyManager {
 
     /// Set up global hotkey listener for completion trigger
     private func setupHotkey() {
-        // Register handler for completion trigger shortcut
+        // Register handler for primary completion trigger shortcut
         KeyboardShortcuts.onKeyDown(for: .completionTrigger) { [weak self] in
-            os_log("Hotkey triggered", log: .hotkey, type: .info)
+            os_log("Primary hotkey triggered", log: .hotkey, type: .info)
+            Task { @MainActor in
+                self?.triggerCompletion()
+            }
+        }
+        
+        // Register handler for secondary completion trigger shortcut
+        KeyboardShortcuts.onKeyDown(for: .completionTrigger2) { [weak self] in
+            os_log("Secondary hotkey triggered", log: .hotkey, type: .info)
             Task { @MainActor in
                 self?.triggerCompletion()
             }
         }
 
-        os_log("Global hotkey registered", log: .hotkey, type: .info)
+        os_log("Global hotkeys registered (primary + secondary)", log: .hotkey, type: .info)
     }
 
     // MARK: - Completion Workflow
@@ -142,10 +150,14 @@ class HotkeyManager {
 // MARK: - KeyboardShortcuts Extension
 
 extension KeyboardShortcuts.Name {
-    /// Main completion trigger shortcut name
+    /// Primary completion trigger shortcut name
     /// Default: Ctrl+I
     static let completionTrigger = Self(
         "completionTrigger",
         default: .init(.i, modifiers: [.control])
     )
+    
+    /// Secondary completion trigger shortcut name (optional)
+    /// Default: None (user can configure)
+    static let completionTrigger2 = Self("completionTrigger2")
 }
