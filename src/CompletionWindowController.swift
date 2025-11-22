@@ -273,12 +273,40 @@ class CompletionWindowController: NSWindowController {
         // Vertical offset from cursor (no horizontal offset - align directly like TextEdit)
         let offsetY: CGFloat = 20
 
-        // Always position above cursor for stable behavior
-        var origin = CGPoint(
-            x: point.x,
-            y: point.y + offsetY
-        )
-        os_log("   Position: ABOVE cursor", log: .ui, type: .info)
+        // Dynamic positioning: try above first, flip to below if not enough space
+        var origin = CGPoint(x: point.x, y: point.y + offsetY)
+
+        // Check if there's enough space above the cursor
+        let spaceAbove = visibleFrame.maxY - (point.y + offsetY)
+        let spaceBelow = point.y - offsetY - visibleFrame.minY
+
+        os_log("   Space above cursor: %{public}f", log: .ui, type: .info, spaceAbove)
+        os_log("   Space below cursor: %{public}f", log: .ui, type: .info, spaceBelow)
+        os_log("   Window height needed: %{public}f", log: .ui, type: .info, windowSize.height)
+
+        if spaceAbove < windowSize.height {
+            // Not enough space above, try below
+            os_log("   ⚠️  Not enough space above - checking below", log: .ui, type: .info)
+
+            if spaceBelow >= windowSize.height {
+                // Enough space below, position there
+                origin.y = point.y - windowSize.height - offsetY
+                os_log("   ✓ Positioning BELOW cursor", log: .ui, type: .info)
+            } else {
+                // Not enough space in either direction
+                // Choose the side with more space
+                if spaceBelow > spaceAbove {
+                    origin.y = visibleFrame.minY + 10
+                    os_log("   ⚠️  Insufficient space both sides - using bottom edge (more space below)", log: .ui, type: .info)
+                } else {
+                    origin.y = visibleFrame.maxY - windowSize.height - 10
+                    os_log("   ⚠️  Insufficient space both sides - using top edge (more space above)", log: .ui, type: .info)
+                }
+            }
+        } else {
+            os_log("   ✓ Positioning ABOVE cursor (default)", log: .ui, type: .info)
+        }
+
         os_log("   Initial calculated origin: (%{public}f, %{public}f)", log: .ui, type: .info, origin.x, origin.y)
 
         // Adjust horizontally if off-screen
@@ -303,10 +331,7 @@ class CompletionWindowController: NSWindowController {
             origin.x = clampedX
         }
 
-        // No vertical flipping - just clamp to screen bounds if needed
-        // (Above cursor positioning is stable and rarely needs adjustment)
-
-        // Clamp vertically to visible frame
+        // Final vertical bounds check
         let clampedY = max(visibleFrame.minY + 10, min(origin.y, visibleFrame.maxY - windowSize.height - 10))
         if clampedY != origin.y {
             os_log("   ⚠️  Clamped Y: %{public}f → %{public}f", log: .ui, type: .info, origin.y, clampedY)

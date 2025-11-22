@@ -402,13 +402,54 @@ class AccessibilityElementExtractor {
                     let boundsSuccess = AXValueGetValue(boundsAXValue, .cgRect, &bounds)
 
                     if boundsSuccess {
-                        os_log("📍 Cursor bounds rect: origin(%{public}f, %{public}f) size(%{public}f × %{public}f)", log: .accessibility, type: .debug, bounds.origin.x, bounds.origin.y, bounds.width, bounds.height)
+                        os_log("📍 Cursor bounds rect (Accessibility coords): origin(%{public}f, %{public}f) size(%{public}f × %{public}f)", log: .accessibility, type: .debug, bounds.origin.x, bounds.origin.y, bounds.width, bounds.height)
 
-                        let cursorBottomY = bounds.maxY
+                        // Accessibility API uses top-left origin (Y increases downward)
+                        // NSScreen uses bottom-left origin (Y increases upward)
+                        // Need to convert: screenY = screenHeight - accessibilityY
+
+                        // CRITICAL: Find the screen that contains this cursor position
+                        // We can't use NSScreen.main because cursor might be on a different screen
+                        let cursorAccessibilityPoint = CGPoint(x: bounds.origin.x, y: bounds.origin.y)
+                        let containingScreen = NSScreen.screens.first { screen in
+                            // Convert screen frame to Accessibility coordinates for comparison
+                            // Accessibility: top-left origin, Y increases downward
+                            // NSScreen: bottom-left origin, Y increases upward
+                            // For a screen, Accessibility Y=0 corresponds to NSScreen Y=screenHeight
+                            let screenAccessibilityMinY: CGFloat = 0  // Top of screen in Accessibility coords
+                            let screenAccessibilityMaxY = screen.frame.height  // Bottom of screen in Accessibility coords
+                            let screenAccessibilityMinX = screen.frame.origin.x
+                            let screenAccessibilityMaxX = screen.frame.origin.x + screen.frame.width
+
+                            let containsPoint = cursorAccessibilityPoint.x >= screenAccessibilityMinX &&
+                                               cursorAccessibilityPoint.x <= screenAccessibilityMaxX &&
+                                               cursorAccessibilityPoint.y >= screenAccessibilityMinY &&
+                                               cursorAccessibilityPoint.y <= screenAccessibilityMaxY
+
+                            os_log("🖥️  Screen check: frame=%{public}@, contains=(%{public}d)", log: .accessibility, type: .debug, String(describing: screen.frame), containsPoint)
+                            return containsPoint
+                        } ?? NSScreen.main
+
+                        guard let targetScreen = containingScreen else {
+                            os_log("⚠️  Could not find any screen for coordinate conversion", log: .accessibility, type: .error)
+                            return .failure(.axApiFailed(attribute: "screen", code: -1))
+                        }
+
+                        os_log("🖥️  Using screen: frame=%{public}@", log: .accessibility, type: .debug, String(describing: targetScreen.frame))
+
+                        let screenHeight = targetScreen.frame.height
+                        let screenOriginX = targetScreen.frame.origin.x
                         let cursorX = bounds.origin.x
+                        let cursorBottomY = bounds.maxY  // Bottom of cursor in Accessibility coords
 
-                        let cursorPosition = CGPoint(x: cursorX, y: cursorBottomY)
-                        os_log("📍 Cursor position (bottom of cursor): (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorPosition.x, cursorPosition.y)
+                        // Convert to NSScreen coordinate system
+                        // In NSScreen coordinates, this screen's bottom-left is at (screenOriginX, screenOriginY)
+                        let screenY = targetScreen.frame.origin.y + (screenHeight - cursorBottomY)
+                        let cursorPosition = CGPoint(x: cursorX, y: screenY)
+
+                        os_log("📍 Cursor position (Accessibility): (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorX, cursorBottomY)
+                        os_log("📍 Cursor position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorPosition.x, cursorPosition.y)
+                        os_log("🖥️  Screen height: %{public}f, origin: (%{public}f, %{public}f)", log: .accessibility, type: .debug, screenHeight, screenOriginX, targetScreen.frame.origin.y)
                         return .success(cursorPosition)
                     }
                 }
@@ -422,9 +463,34 @@ class AccessibilityElementExtractor {
             let success = AXValueGetValue(axValue, .cgPoint, &point)
 
             if success {
-                os_log("📍 Cursor position from element bounds: (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
+                // Convert Accessibility API coordinates to NSScreen coordinates
+                // Find the screen that contains this position
+                let containingScreen = NSScreen.screens.first { screen in
+                    let screenAccessibilityMinX = screen.frame.origin.x
+                    let screenAccessibilityMaxX = screen.frame.origin.x + screen.frame.width
+                    let screenAccessibilityMinY: CGFloat = 0
+                    let screenAccessibilityMaxY = screen.frame.height
+
+                    return point.x >= screenAccessibilityMinX &&
+                           point.x <= screenAccessibilityMaxX &&
+                           point.y >= screenAccessibilityMinY &&
+                           point.y <= screenAccessibilityMaxY
+                } ?? NSScreen.main
+
+                guard let targetScreen = containingScreen else {
+                    os_log("⚠️  Could not find any screen for coordinate conversion (fallback)", log: .accessibility, type: .error)
+                    return .failure(.axApiFailed(attribute: "screen", code: -1))
+                }
+
+                let screenHeight = targetScreen.frame.height
+                let screenY = targetScreen.frame.origin.y + (screenHeight - point.y)
+                let convertedPoint = CGPoint(x: point.x, y: screenY)
+
+                os_log("📍 Element position (Accessibility): (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
+                os_log("📍 Element position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, convertedPoint.x, convertedPoint.y)
+                os_log("🖥️  Using screen: frame=%{public}@", log: .accessibility, type: .debug, String(describing: targetScreen.frame))
                 os_log("⚠️  Using element position as fallback", log: .accessibility, type: .debug)
-                return .success(point)
+                return .success(convertedPoint)
             }
         }
 
