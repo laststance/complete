@@ -147,20 +147,58 @@ print_success "Permissions set"
 # Step 5: Code sign (optional but recommended)
 if [ -n "$SIGN_IDENTITY" ]; then
     print_step "Signing app bundle with: ${SIGN_IDENTITY}..."
-    
-    codesign --force --deep --sign "$SIGN_IDENTITY" "${APP_BUNDLE}" 2>&1 || {
-        print_warning "Code signing failed. Continuing without signature."
+
+    # Check if entitlements file exists
+    ENTITLEMENTS_FILE="Complete.entitlements"
+    if [ ! -f "$ENTITLEMENTS_FILE" ]; then
+        print_warning "Entitlements file not found: $ENTITLEMENTS_FILE"
+        print_warning "Signing without entitlements - accessibility may not work properly"
+        ENTITLEMENTS_FLAG=""
+    else
+        ENTITLEMENTS_FLAG="--entitlements $ENTITLEMENTS_FILE"
+    fi
+
+    # Sign with hardened runtime and entitlements (required for accessibility)
+    # First sign the binary inside the bundle
+    codesign --force --options runtime \
+        $ENTITLEMENTS_FLAG \
+        --sign "$SIGN_IDENTITY" \
+        --timestamp \
+        "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}" 2>&1 || {
+        print_warning "Binary signing failed. Continuing without signature."
         SIGN_IDENTITY=""
     }
-    
+
+    # Then sign the whole bundle
     if [ -n "$SIGN_IDENTITY" ]; then
-        print_success "App signed successfully"
-        
-        # Verify signature
-        if codesign --verify --deep --strict "${APP_BUNDLE}" 2>/dev/null; then
-            print_success "Signature verified"
+        codesign --force --options runtime \
+            $ENTITLEMENTS_FLAG \
+            --sign "$SIGN_IDENTITY" \
+            --timestamp \
+            "${APP_BUNDLE}" 2>&1 || {
+            print_warning "Bundle signing failed. Continuing without signature."
+            SIGN_IDENTITY=""
+        }
+    fi
+
+    if [ -n "$SIGN_IDENTITY" ]; then
+        print_success "App signed with hardened runtime"
+
+        # Verify signature includes hardened runtime
+        VERIFY_OUTPUT=$(codesign -dv --verbose=2 "${APP_BUNDLE}" 2>&1)
+        if echo "$VERIFY_OUTPUT" | grep -q "runtime"; then
+            print_success "Hardened runtime verified"
         else
-            print_warning "Signature verification failed (app will still work)"
+            print_warning "Hardened runtime flag not detected"
+        fi
+
+        # Verify entitlements are embedded
+        if [ -n "$ENTITLEMENTS_FLAG" ]; then
+            if codesign -d --entitlements - "${APP_BUNDLE}" 2>&1 | grep -q "automation.apple-events"; then
+                print_success "Entitlements embedded correctly"
+            else
+                print_warning "Entitlements may not be embedded correctly"
+            fi
         fi
     fi
 fi
