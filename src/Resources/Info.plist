@@ -28,8 +28,9 @@
     <key>CFBundleExecutable</key>
     <string>Complete</string>
 
-    <!-- CRITICAL: LSUIElement = YES prevents dock icon and menu bar -->
-    <!-- App runs as background agent (agent application) -->
+    <!-- LSUIElement (background agent without dock icon) -->
+    <!-- As documented in docs/distribution-guide.md -->
+    <!-- Prevents dock icon and menu bar - app runs as background agent -->
     <key>LSUIElement</key>
     <true/>
 
