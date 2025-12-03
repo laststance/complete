@@ -77,8 +77,9 @@ Complete-*.dmg
 # Local installation artifacts
 Complete.app/
 
-# Manual test scripts (debug/development only)
-manual-tests/
+# Visual screenshot testing outputs (generated files)
+tests/visualScreenshotTesting/*.png
+tests/visualScreenshotTesting/*.jpg
 
 # direnv configuration
 .envrc
