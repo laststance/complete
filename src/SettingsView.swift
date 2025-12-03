@@ -89,7 +89,7 @@ struct SettingsView: View {
             }
             .help("Press keys to set the primary shortcut for triggering completions")
 
-            Text("Default: ⌃I (Control+I)")
+            Text("Default: ⇧⌘I (Shift+Command+I)")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.leading, labelWidth + 8)

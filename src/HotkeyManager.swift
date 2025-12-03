@@ -151,10 +151,10 @@ class HotkeyManager {
 
 extension KeyboardShortcuts.Name {
     /// Primary completion trigger shortcut name
-    /// Default: Ctrl+I
+    /// Default: Shift+Command+I
     static let completionTrigger = Self(
         "completionTrigger",
-        default: .init(.i, modifiers: [.control])
+        default: .init(.i, modifiers: [.shift, .command])
     )
     
     /// Secondary completion trigger shortcut name (optional)

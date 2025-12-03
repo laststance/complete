@@ -121,15 +121,15 @@ class CrossAppTestHelper {
     // MARK: - Hotkey Simulation
 
     /// Trigger autocomplete hotkey using CGEvent
-    /// Note: Simulates Ctrl+I (default autocomplete trigger)
+    /// Note: Simulates Shift+Command+I (default autocomplete trigger)
     static func triggerAutocompleteHotkey() {
-        // Ctrl+I = Control + I key
+        // Shift+Command+I
         // Virtual key code for 'I' is 0x22
         let keyCode: CGKeyCode = 0x22
 
-        // Key down with Control modifier
+        // Key down with Shift+Command modifiers
         if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) {
-            eventDown.flags = .maskControl
+            eventDown.flags = [.maskShift, .maskCommand]
             eventDown.post(tap: .cghidEventTap)
         }
 
