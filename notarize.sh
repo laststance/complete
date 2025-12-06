@@ -156,23 +156,62 @@ else
     print_success "Build complete: $BUILD_DIR/$APP_NAME"
 fi
 
-# Step 2: Code Sign Binary
-print_step "Signing binary with hardened runtime..."
+# Step 2: Create .app bundle structure
+print_step "Creating ${APP_NAME}.app bundle..."
 
+APP_BUNDLE="${OUTPUT_DIR}/${APP_NAME}.app"
+rm -rf "$APP_BUNDLE"
+
+mkdir -p "${APP_BUNDLE}/Contents/MacOS"
+mkdir -p "${APP_BUNDLE}/Contents/Resources"
+
+# Copy binary
+cp "$BUILD_DIR/$APP_NAME" "${APP_BUNDLE}/Contents/MacOS/"
+
+# Copy Info.plist
+if [ -f "src/Resources/Info.plist" ]; then
+    cp "src/Resources/Info.plist" "${APP_BUNDLE}/Contents/"
+else
+    print_error "Info.plist not found at src/Resources/Info.plist"
+fi
+
+# Copy app icon
+if [ -f "src/Resources/AppIcon.icns" ]; then
+    cp "src/Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/"
+else
+    print_warning "AppIcon.icns not found - app will use default icon"
+fi
+
+# Set executable permissions
+chmod +x "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
+
+print_success "App bundle created: ${APP_BUNDLE}"
+
+# Step 3: Code Sign App Bundle
+print_step "Signing app bundle with hardened runtime..."
+
+# First sign the binary inside the bundle
 codesign --force --options runtime \
   --entitlements "$ENTITLEMENTS" \
   --sign "$DEVELOPER_ID" \
   --timestamp \
-  "$BUILD_DIR/$APP_NAME"
+  "${APP_BUNDLE}/Contents/MacOS/$APP_NAME"
+
+# Then sign the whole bundle
+codesign --force --options runtime \
+  --entitlements "$ENTITLEMENTS" \
+  --sign "$DEVELOPER_ID" \
+  --timestamp \
+  "$APP_BUNDLE"
 
 # Verify signature
 print_step "Verifying signature..."
-codesign -dv --verbose=4 "$BUILD_DIR/$APP_NAME" 2>&1 | grep -q "runtime" || \
+codesign -dv --verbose=4 "$APP_BUNDLE" 2>&1 | grep -q "runtime" || \
     print_error "Hardened runtime not enabled in signature"
 
-print_success "Binary signed successfully"
+print_success "App bundle signed successfully"
 
-# Step 3: Create DMG
+# Step 4: Create DMG
 print_step "Creating DMG package..."
 
 DMG_NAME="${APP_NAME}-$(date +%Y%m%d).dmg"
@@ -183,7 +222,7 @@ DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 
 # Create temporary directory for DMG contents
 TEMP_DMG_DIR=$(mktemp -d)
-cp "$BUILD_DIR/$APP_NAME" "$TEMP_DMG_DIR/"
+cp -R "$APP_BUNDLE" "$TEMP_DMG_DIR/"
 
 # Create DMG
 hdiutil create -volname "$APP_NAME" \
@@ -191,12 +230,13 @@ hdiutil create -volname "$APP_NAME" \
   -ov -format UDZO \
   "$DMG_PATH"
 
-# Clean up temporary directory
+# Clean up temporary directory and app bundle
 rm -rf "$TEMP_DMG_DIR"
+rm -rf "$APP_BUNDLE"
 
 print_success "DMG created: $DMG_PATH"
 
-# Step 4: Sign DMG
+# Step 5: Sign DMG
 print_step "Signing DMG..."
 
 codesign --sign "$DEVELOPER_ID" \
@@ -205,7 +245,7 @@ codesign --sign "$DEVELOPER_ID" \
 
 print_success "DMG signed successfully"
 
-# Step 5: Notarization (optional)
+# Step 6: Notarization (optional)
 if [ "$SKIP_NOTARIZATION" = true ]; then
     print_warning "Skipping notarization step"
     print_success "Distribution package ready: $DMG_PATH"
@@ -232,7 +272,7 @@ else
     print_error "Notarization failed. Output:\n$SUBMISSION_OUTPUT"
 fi
 
-# Step 6: Staple Ticket
+# Step 7: Staple Ticket
 print_step "Stapling notarization ticket..."
 
 xcrun stapler staple "$DMG_PATH"
@@ -244,7 +284,7 @@ else
     print_error "Stapling failed"
 fi
 
-# Step 7: Final Verification
+# Step 8: Final Verification
 print_step "Performing final verification..."
 
 SPCTL_OUTPUT=$(spctl -a -vv -t install "$DMG_PATH" 2>&1)
