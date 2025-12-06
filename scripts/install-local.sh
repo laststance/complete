@@ -134,6 +134,7 @@ print_step "Copying files into bundle..."
 
 cp "$BINARY_PATH" "${APP_BUNDLE}/Contents/MacOS/"
 cp "src/Resources/Info.plist" "${APP_BUNDLE}/Contents/"
+cp "src/Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/"
 
 print_success "Files copied"
 
