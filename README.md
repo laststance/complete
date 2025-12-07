@@ -5,7 +5,7 @@ System-wide spell autocomplete for macOS triggered by global hotkey (Shift+Comma
 ## Project Status
 
 **Status**: ✅ Production Ready
-**Version**: 0.1.0
+**Version**: 0.1.1
 **Completion**: 22/22 tasks (100%)
 
 ### All Features Implemented

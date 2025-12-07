@@ -1,8 +1,27 @@
-# Complete v0.1.0 - Initial Release
+# Complete v0.1.1 - Bug Fixes & Visual Testing
 
 System-wide spell autocomplete for macOS, triggered by global hotkey.
 
-## Features
+## What's New in v0.1.1
+
+### Bug Fixes
+- **Improved popup positioning for TextEdit**: Fixed regression where popup appeared at mouse position instead of text cursor
+- **Better Chrome browser support**: Popup now correctly falls back to mouse position when accessibility API fails in browser address bars
+- **Fixed DMG bundle structure**: DMG now contains proper .app bundle with icon (not raw executable)
+
+### Documentation & Testing
+- **Visual regression testing**: Added baseline expectation screenshots for automated position verification
+- **Updated documentation**: Corrected hotkey references, version numbers, and test counts
+- **Improved manual testing checklist**: Added visual regression verification process
+
+## Changes Since v0.1.0
+
+### Commits
+- `e9033b8` docs: add visual regression test expectations and update documentation
+- `e7ce0f3` fix: improve popup positioning for TextEdit and Chrome browser
+- `f3b501e` fix: create proper .app bundle structure in notarize.sh
+
+## Features (unchanged from v0.1.0)
 
 - **Global Hotkey Trigger**: Shift+Command+I (⇧⌘I) activates completions in any app
 - **Smart Positioning**: Floating window appears near cursor (top or bottom, configurable)

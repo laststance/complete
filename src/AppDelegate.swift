@@ -142,7 +142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenu = NSMenu()
 
         // Add menu items
-        statusMenu?.addItem(NSMenuItem(title: "Complete v0.1.0", action: nil, keyEquivalent: ""))
+        statusMenu?.addItem(NSMenuItem(title: "Complete v0.1.1", action: nil, keyEquivalent: ""))
         statusMenu?.addItem(NSMenuItem.separator())
 
         // Settings menu item (will be implemented in Phase 7)
@@ -175,7 +175,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "Complete v0.1.0"
+        alert.messageText = "Complete v0.1.1"
         alert.informativeText = """
         System-wide text autocomplete for macOS
 
