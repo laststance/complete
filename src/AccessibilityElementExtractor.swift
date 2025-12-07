@@ -65,23 +65,37 @@ class AccessibilityElementExtractor {
         // Try to get focused element (works for native apps)
         var focusedElement = getFocusedElement(from: systemWide)
 
-        // Fallback for web browsers: use element at cursor position
+        // Fallback for web browsers: use element at mouse position
+        // Web browsers often don't expose focused element via kAXFocusedUIElementAttribute,
+        // but we can find the text input element using AXUIElementCopyElementAtPosition()
         if focusedElement == nil {
-            os_log("⚠️  No focused element (likely web browser), trying element at cursor position...", log: .accessibility, type: .debug)
+            os_log("⚠️  No focused element (likely web browser), trying element at mouse position...", log: .accessibility, type: .debug)
 
-            // Get current cursor screen position
-            switch getCursorScreenPosition() {
-            case .success(let cursorPosition):
-                os_log("📍 Cursor position: (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorPosition.x, cursorPosition.y)
-                focusedElement = getElementAtPosition(cursorPosition)
+            // Get mouse position and convert to Accessibility coordinates
+            let mousePosition = NSEvent.mouseLocation
+            os_log("📍 Mouse position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
+
+            // Convert NSScreen coordinates (bottom-left origin) to Accessibility coordinates (top-left origin)
+            if let screen = NSScreen.screens.first(where: { NSMouseInRect(mousePosition, $0.frame, false) }) ?? NSScreen.main {
+                // In Accessibility coords, Y=0 is at the TOP of the screen
+                // In NSScreen coords, Y=0 is at the BOTTOM
+                // For a point on this screen: accessibilityY = screenHeight - (mouseY - screenOriginY)
+                let accessibilityY = screen.frame.height - (mousePosition.y - screen.frame.origin.y)
+                let accessibilityPoint = CGPoint(x: mousePosition.x, y: accessibilityY)
+
+                os_log("📍 Converted to Accessibility coords: (%{public}f, %{public}f)", log: .accessibility, type: .debug, accessibilityPoint.x, accessibilityY)
+                os_log("🖥️  Screen: frame=%{public}@", log: .accessibility, type: .debug, String(describing: screen.frame))
+
+                focusedElement = getElementAtPosition(accessibilityPoint)
 
                 if focusedElement != nil {
-                    os_log("✅ Found element at cursor position (web browser support)", log: .accessibility, type: .debug)
+                    os_log("✅ Found element at mouse position (web browser support)", log: .accessibility, type: .debug)
                 } else {
-                    return .failure(.elementNotFoundAtPosition(x: cursorPosition.x, y: cursorPosition.y))
+                    return .failure(.elementNotFoundAtPosition(x: accessibilityPoint.x, y: accessibilityPoint.y))
                 }
-            case .failure(let error):
-                return .failure(error)
+            } else {
+                os_log("❌ Could not determine screen for coordinate conversion", log: .accessibility, type: .error)
+                return .failure(.noFocusedElement)
             }
         }
 
@@ -360,13 +374,36 @@ class AccessibilityElementExtractor {
     /// ```
     func getCursorScreenPosition(from element: AXUIElement? = nil) -> Result<CGPoint, AccessibilityError> {
         // Use provided element, or try to get focused element
-        let focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
+        var focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
+
+        // Strategy 0: If no focused element, try to find element at mouse position
+        // This is critical for web browsers where getFocusedElement() fails but
+        // we can still find the text input element via getElementAtPosition()
+        if focusedElement == nil {
+            os_log("⚠️  No focused element, trying element at mouse position for better positioning", log: .accessibility, type: .debug)
+            let mousePosition = NSEvent.mouseLocation
+
+            // Convert mouse position from NSScreen coords (bottom-left origin) to Accessibility coords (top-left origin)
+            // to use with getElementAtPosition()
+            if let screen = NSScreen.screens.first(where: { NSMouseInRect(mousePosition, $0.frame, false) }) ?? NSScreen.main {
+                let accessibilityY = screen.frame.height - (mousePosition.y - screen.frame.origin.y)
+                let accessibilityPoint = CGPoint(x: mousePosition.x, y: accessibilityY)
+
+                os_log("📍 Mouse position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
+                os_log("📍 Mouse position (Accessibility): (%{public}f, %{public}f)", log: .accessibility, type: .debug, accessibilityPoint.x, accessibilityY)
+
+                if let elementAtMouse = getElementAtPosition(accessibilityPoint) {
+                    os_log("✅ Found element at mouse position, using for position calculation", log: .accessibility, type: .debug)
+                    focusedElement = elementAtMouse
+                }
+            }
+        }
 
         guard let focusedElement = focusedElement else {
-            os_log("⚠️  No focused element for cursor position, using mouse position", log: .accessibility, type: .debug)
-            // Fallback to mouse cursor position for web browsers
+            os_log("⚠️  No focused element for cursor position, using mouse position as final fallback", log: .accessibility, type: .debug)
+            // Ultimate fallback to mouse cursor position
             let mousePosition = NSEvent.mouseLocation
-            os_log("📍 Using mouse position: (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
+            os_log("📍 Using raw mouse position: (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
             return .success(mousePosition)
         }
 
@@ -457,46 +494,51 @@ class AccessibilityElementExtractor {
         }
 
         // Strategy 2: Get element position as fallback
+        // NOTE: This returns the TOP-LEFT corner of the element, not the text cursor position
+        // For text fields, this is usually close enough, but for browser address bars it may be imprecise
         if let positionValue = getAttributeValue(focusedElement, attribute: kAXPositionAttribute as CFString) {
             let axValue = positionValue as! AXValue
             var point = CGPoint.zero
             let success = AXValueGetValue(axValue, .cgPoint, &point)
 
             if success {
-                // Convert Accessibility API coordinates to NSScreen coordinates
-                // Find the screen that contains this position
-                let containingScreen = NSScreen.screens.first { screen in
-                    let screenAccessibilityMinX = screen.frame.origin.x
-                    let screenAccessibilityMaxX = screen.frame.origin.x + screen.frame.width
-                    let screenAccessibilityMinY: CGFloat = 0
-                    let screenAccessibilityMaxY = screen.frame.height
+                os_log("📍 Element position (Accessibility coords - raw): (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
 
-                    return point.x >= screenAccessibilityMinX &&
-                           point.x <= screenAccessibilityMaxX &&
-                           point.y >= screenAccessibilityMinY &&
-                           point.y <= screenAccessibilityMaxY
-                } ?? NSScreen.main
+                // Accessibility API coordinates use screen-relative positioning where:
+                // - X=0 is the left edge of the leftmost screen
+                // - Y=0 is the TOP of the main screen (primary display)
+                // - Y increases DOWNWARD
+                //
+                // NSScreen coordinates use:
+                // - X=0 is the left edge of the leftmost screen
+                // - Y=0 is the BOTTOM of the main screen
+                // - Y increases UPWARD
+                //
+                // The main screen (primary display) has frame.origin.y = 0 in NSScreen coords
 
-                guard let targetScreen = containingScreen else {
-                    os_log("⚠️  Could not find any screen for coordinate conversion (fallback)", log: .accessibility, type: .error)
+                // Get the main screen height for coordinate conversion
+                guard let mainScreen = NSScreen.screens.first else {
+                    os_log("⚠️  No screens available for coordinate conversion", log: .accessibility, type: .error)
                     return .failure(.axApiFailed(attribute: "screen", code: -1))
                 }
 
-                let screenHeight = targetScreen.frame.height
-                let screenY = targetScreen.frame.origin.y + (screenHeight - point.y)
-                let convertedPoint = CGPoint(x: point.x, y: screenY)
+                // Convert Y coordinate: NSScreen Y = mainScreenHeight - accessibilityY
+                // This converts from top-left origin to bottom-left origin
+                let mainScreenHeight = mainScreen.frame.height + mainScreen.frame.origin.y
+                let nsScreenY = mainScreenHeight - point.y
+                let convertedPoint = CGPoint(x: point.x, y: nsScreenY)
 
-                os_log("📍 Element position (Accessibility): (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
                 os_log("📍 Element position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, convertedPoint.x, convertedPoint.y)
-                os_log("🖥️  Using screen: frame=%{public}@", log: .accessibility, type: .debug, String(describing: targetScreen.frame))
-                os_log("⚠️  Using element position as fallback", log: .accessibility, type: .debug)
+                os_log("🖥️  Main screen height (for conversion): %{public}f", log: .accessibility, type: .debug, mainScreenHeight)
+                os_log("⚠️  Using element position as fallback (Strategy 2)", log: .accessibility, type: .debug)
                 return .success(convertedPoint)
             }
         }
 
         // Strategy 3: Ultimate fallback to mouse cursor position
+        // This is the most reliable for browsers where other strategies fail
         let mousePosition = NSEvent.mouseLocation
-        os_log("📍 Using mouse position as fallback: (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
+        os_log("📍 Using mouse position as fallback (Strategy 3): (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
         return .success(mousePosition)
     }
 }

@@ -56,6 +56,12 @@ class HotkeyManager {
     private func triggerCompletion() {
         os_log("=== Completion Workflow Started ===", log: .hotkey, type: .info)
 
+        // CRITICAL: Capture mouse position IMMEDIATELY at hotkey trigger
+        // This is the most reliable position for browsers where accessibility APIs may fail
+        // Must be captured BEFORE any async operations or app activation that could change it
+        let initialMousePosition = NSEvent.mouseLocation
+        os_log("📍 Initial mouse position captured: (%.1f, %.1f)", log: .hotkey, type: .debug, initialMousePosition.x, initialMousePosition.y)
+
         // Phase 1: Check accessibility permissions
         os_log("Phase 1: Checking accessibility permissions", log: .hotkey, type: .debug)
         guard accessibilityManager.checkPermissionStatus() else {
@@ -105,15 +111,22 @@ class HotkeyManager {
         }
 
         // Get cursor screen position for accurate window placement
-        let cursorPosition: CGPoint
+        // getCursorScreenPosition() already implements a 3-strategy fallback:
+        // 1. Text range bounds (most accurate, works for TextEdit, Xcode, etc.)
+        // 2. Element position (fallback)
+        // 3. Mouse position (ultimate fallback for browsers)
+        // No additional sanity check needed here - trust the accessibility result
+        var cursorPosition: CGPoint
         switch accessibilityManager.getCursorScreenPosition(from: nil) {
         case .success(let position):
             cursorPosition = position
-            os_log("Cursor position: (%.1f, %.1f)", log: .hotkey, type: .debug, position.x, position.y)
+            os_log("Cursor position from accessibility: (%.1f, %.1f)", log: .hotkey, type: .debug, position.x, position.y)
         case .failure(let error):
-            os_log("Could not get cursor position: %{public}@, using mouse fallback", log: .hotkey, type: .error, error.userFriendlyMessage)
-            cursorPosition = NSEvent.mouseLocation
+            os_log("Could not get cursor position: %{public}@, using initial mouse position", log: .hotkey, type: .error, error.userFriendlyMessage)
+            cursorPosition = initialMousePosition
         }
+
+        os_log("📍 Final cursor position for window: (%.1f, %.1f)", log: .hotkey, type: .info, cursorPosition.x, cursorPosition.y)
 
         // Phase 5: Show completion window with suggestions at cursor position
         Task { @MainActor in

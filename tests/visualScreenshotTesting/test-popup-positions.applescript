@@ -83,10 +83,10 @@ repeat with positionData in testPositions
 
 	delay 0.3
 
-	-- Trigger Complete popup (Ctrl+I)
-	log "Triggering Ctrl+I at position: " & positionName
+	-- Trigger Complete popup (Shift+Command+I)
+	log "Triggering Shift+Command+I at position: " & positionName
 	tell application "System Events"
-		key code 34 using control down -- 34 is 'i' key
+		key code 34 using {shift down, command down} -- 34 is 'i' key
 	end tell
 
 	delay 1.0
