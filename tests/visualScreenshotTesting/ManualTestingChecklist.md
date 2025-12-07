@@ -19,11 +19,11 @@ This checklist covers manual testing scenarios that cannot be fully automated.
 ## 1. Global Hotkey Validation
 
 ### 1.1 Hotkey Triggering
-- [ ] Ctrl+I triggers autocomplete in TextEdit
-- [ ] Ctrl+I triggers autocomplete in Mail
-- [ ] Ctrl+I triggers autocomplete in Safari
-- [ ] Ctrl+I triggers autocomplete in Chrome
-- [ ] Ctrl+I triggers autocomplete in VS Code
+- [ ] Shift+Command+I (⇧⌘I) triggers autocomplete in TextEdit
+- [ ] Shift+Command+I (⇧⌘I) triggers autocomplete in Mail
+- [ ] Shift+Command+I (⇧⌘I) triggers autocomplete in Safari
+- [ ] Shift+Command+I (⇧⌘I) triggers autocomplete in Chrome
+- [ ] Shift+Command+I (⇧⌘I) triggers autocomplete in VS Code
 - [ ] Hotkey works with external keyboard
 - [ ] Hotkey works with laptop built-in keyboard
 - [ ] Hotkey works in full-screen apps
@@ -61,6 +61,46 @@ This checklist covers manual testing scenarios that cannot be fully automated.
 - [ ] Font size is appropriate
 - [ ] Text doesn't clip or truncate unexpectedly
 - [ ] Scrolling works for many suggestions
+
+### 2.4 Visual Regression Testing (Expectation-Based)
+
+**Prerequisites**: Run `osascript tests/visualScreenshotTesting/test-popup-positions.applescript`
+
+**Comparison Process**: For each position, compare new screenshot against baseline expectation.
+
+| Position | Expectation | Test Result | Status |
+|----------|-------------|-------------|--------|
+| top-left | `expectations/top-left.png` | `~/Desktop/complete-popup-tests/top-left.png` | [ ] PASS / FAIL |
+| top-right | `expectations/top-right.png` | `~/Desktop/complete-popup-tests/top-right.png` | [ ] PASS / FAIL |
+| bottom-left | `expectations/bottom-left.png` | `~/Desktop/complete-popup-tests/bottom-left.png` | [ ] PASS / FAIL |
+| bottom-right | `expectations/bottom-right.png` | `~/Desktop/complete-popup-tests/bottom-right.png` | [ ] PASS / FAIL |
+| center | `expectations/center.png` | `~/Desktop/complete-popup-tests/center.png` | [ ] PASS / FAIL |
+
+**Per-Screenshot Verification Checklist**:
+
+For each of the 5 positions, complete this 3-iteration verification:
+
+**Iteration 1 - Element Location**:
+- [ ] Located TextEdit window position in expectation
+- [ ] Located TextEdit window position in test result
+- [ ] Located "Hell" text cursor position in expectation
+- [ ] Located "Hell" text cursor position in test result
+- [ ] Located popup window in expectation
+- [ ] Located popup window in test result
+
+**Iteration 2 - Position Comparison**:
+- [ ] Popup-to-cursor distance is similar (~50px tolerance)
+- [ ] Popup relative position (above/below) matches expectation
+- [ ] TextEdit window position matches (screen region)
+
+**Iteration 3 - Final Confirmation**:
+- [ ] Re-examined all elements one more time
+- [ ] Confirmed positions match expectation
+- [ ] No visual anomalies detected
+
+**Pass/Fail Criteria**:
+- **PASS**: Popup position relative to cursor matches expectation (within ~50px)
+- **FAIL**: Popup appears in different screen region or distance differs >100px
 
 ---
 

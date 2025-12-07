@@ -1,15 +1,16 @@
 # Complete - macOS System-Wide Autocomplete
 
-System-wide spell autocomplete for macOS triggered by global hotkey (Ctrl+I).
+System-wide spell autocomplete for macOS triggered by global hotkey (Shift+Command+I).
 
 ## Project Status
 
 **Status**: ✅ Production Ready
-**Version**: 1.0.0
+**Version**: 0.1.0
 **Completion**: 22/22 tasks (100%)
 
 ### All Features Implemented
-- ✅ Global hotkey trigger (Ctrl+I, customizable)
+- ✅ Global hotkey trigger (Shift+Command+I, customizable)
+- ✅ Dual hotkey support (primary + secondary)
 - ✅ Floating completion window with smart positioning
 - ✅ TextEdit-quality spell completions (NSSpellChecker)
 - ✅ Keyboard navigation (arrow keys, Enter, Escape)
@@ -17,17 +18,21 @@ System-wide spell autocomplete for macOS triggered by global hotkey (Ctrl+I).
 - ✅ Dark mode support
 - ✅ Settings persistence
 - ✅ Cross-app compatibility (TextEdit, VSCode, Chrome, Safari, Mail)
-- ✅ Comprehensive test suite (67 tests, >80% coverage)
+- ✅ Comprehensive test suite (94 tests, >80% coverage)
 - ✅ Distribution-ready with notarization workflow
 
 ## Installation
 
-### Quick Install (Recommended)
+### Download (Recommended)
+
+Download the latest notarized DMG from [GitHub Releases](https://github.com/laststance/complete/releases) or the [website](https://laststance.github.io/complete/).
+
+### Quick Install from Source
 
 Install Complete.app to `/Applications` with a single command:
 
 ```bash
-./install-local.sh
+./Scripts/install-local.sh
 ```
 
 This will:
@@ -38,9 +43,9 @@ This will:
 
 **Options**:
 ```bash
-./install-local.sh --debug         # Build in debug mode
-./install-local.sh --no-install    # Create .app without installing
-./install-local.sh --help          # Show help
+./Scripts/install-local.sh --debug         # Build in debug mode
+./Scripts/install-local.sh --no-install    # Create .app without installing
+./Scripts/install-local.sh --help          # Show help
 ```
 
 ### Manual Installation
@@ -91,14 +96,16 @@ complete/
 ├── Package.swift                      # Swift Package Manager configuration
 ├── Package.resolved                   # Dependency lock file
 ├── Complete.entitlements              # Accessibility permissions
-├── install-local.sh                   # Local installation script
+├── Scripts/install-local.sh           # Local installation script
 ├── notarize.sh                        # Distribution automation script
 ├── CLAUDE.md                          # Claude Code guidance
-├── src/                               # Source code (12 files, ~3,500 lines)
+├── src/                               # Source code (18 files, ~4,000 lines)
 │   ├── main.swift                    # Application entry point
 │   ├── AppDelegate.swift             # App lifecycle (LSUIElement)
 │   ├── HotkeyManager.swift           # Global hotkey system
-│   ├── AccessibilityManager.swift   # Text extraction/insertion
+│   ├── AccessibilityManager.swift    # Text extraction/insertion coordination
+│   ├── AccessibilityElementExtractor.swift  # Cursor position detection
+│   ├── AccessibilityTextInserter.swift      # Text insertion
 │   ├── CompletionEngine.swift        # NSSpellChecker wrapper
 │   ├── CompletionViewModel.swift     # State management
 │   ├── CompletionWindowController.swift  # NSPanel controller
@@ -107,16 +114,27 @@ complete/
 │   ├── SettingsWindowController.swift # Settings NSPanel
 │   ├── SettingsView.swift            # SwiftUI settings UI
 │   └── Resources/
-│       └── Info.plist                # LSUIElement = YES
-├── tests/                             # Test suite (67 tests)
-│   ├── CompleteTests.swift           # Unit tests (54)
+│       ├── Info.plist                # LSUIElement = YES
+│       └── AppIcon.icns              # Application icon
+├── tests/                             # Test suite (94 tests)
+│   ├── CompleteTests.swift           # Unit tests (76)
 │   ├── IntegrationTests/             # Cross-app tests
+│   │   ├── CrossAppIntegrationTests.swift
+│   │   └── AccessibilityAuditTests.swift
 │   ├── Helpers/                      # Test utilities
-│   └── Manual/                       # Manual test checklist
+│   └── visualScreenshotTesting/      # Visual regression tests
+│       ├── expectations/             # Baseline screenshots
+│       ├── test-popup-positions.applescript
+│       └── ManualTestingChecklist.md
 ├── docs/                              # Documentation
 │   ├── macos-global-hotkey-research-2024.md
 │   ├── performance-testing-report.md
-│   └── distribution-guide.md         # 400+ line distribution manual
+│   ├── distribution-guide.md         # 400+ line distribution manual
+│   └── architecture/decisions/       # Architecture Decision Records
+├── website/                           # Landing page (gh-pages)
+│   ├── index.html
+│   ├── styles.css
+│   └── script.js
 └── claudedocs/                        # Research reports
     └── macOS_Accessibility_API_Research_2024-2025.md
 ```
@@ -188,26 +206,25 @@ See `docs/` for detailed research:
 
 ## Testing
 
-### Test Suite (67 tests, >80% coverage)
+### Test Suite (94 tests, >80% coverage)
 
-**Unit Tests** (54 tests):
+**Unit Tests** (76 tests):
 - CompletionEngine: 15 tests
 - SettingsManager: 12 tests
 - AccessibilityManager: 10 tests
 - TextContext: 8 tests
 - WindowPosition: 5 tests
 - HotkeyManager: 4 tests
+- Additional component tests: 22 tests
 
-**Performance Tests** (13 tests):
-- Completion generation benchmarks
-- Cache hit rate validation
-- Memory leak detection
-- Memory usage profiling
+**Integration Tests** (18 tests):
+- CrossAppIntegrationTests: 8 tests (TextEdit, VSCode, Chrome, Safari, Mail)
+- AccessibilityAuditTests: 10 tests (WCAG compliance)
 
-**Integration Tests**:
-- Cross-app compatibility (TextEdit, VSCode, Chrome, Safari, Mail)
-- Accessibility audit tests
-- Rapid hotkey trigger tests
+**Visual Regression Tests**:
+- Baseline expectations in `tests/visualScreenshotTesting/expectations/`
+- AppleScript automation for 5 screen positions
+- Side-by-side comparison with baseline screenshots
 
 All tests passing with zero warnings, zero errors, zero memory leaks.
 
