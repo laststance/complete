@@ -7,9 +7,17 @@ import os.log
 class AccessibilityElementExtractor {
 
     private let permissionManager: AccessibilityPermissionManager
+    private let cursorPositionResolver: CursorPositionResolver
 
-    init(permissionManager: AccessibilityPermissionManager) {
+    /// Creates an AccessibilityElementExtractor with required dependencies.
+    ///
+    /// - Parameters:
+    ///   - permissionManager: Manages accessibility permission checks
+    ///   - cursorPositionResolver: Resolver for cursor position strategies (injectable for testing)
+    init(permissionManager: AccessibilityPermissionManager,
+         cursorPositionResolver: CursorPositionResolver = CursorPositionResolver()) {
         self.permissionManager = permissionManager
+        self.cursorPositionResolver = cursorPositionResolver
     }
 
     // MARK: - Text Extraction
@@ -151,9 +159,40 @@ class AccessibilityElementExtractor {
         return (focusedElement as! AXUIElement)
     }
 
-    /// Get UI element at specific screen coordinates
-    /// Fallback for web browsers that don't expose focused element properly
+    /// Get UI element at specific screen coordinates with fuzzy matching
+    /// Falls back to nearby positions (±5px grid) for better browser support
+    /// - Parameter point: Screen coordinates in Accessibility coordinate system
+    /// - Returns: AXUIElement at or near the specified position, or nil
     func getElementAtPosition(_ point: CGPoint) -> AXUIElement? {
+        // Try exact position first
+        if let element = queryElementAtExactPosition(point) {
+            return element
+        }
+
+        // Fallback: Try nearby positions (±5px grid) for better browser support
+        // Mouse position has inherent imprecision (±3-5px)
+        // Form inputs may have borders/padding that aren't clickable
+        let offsets: [(x: CGFloat, y: CGFloat)] = [
+            (0, -5), (0, 5), (-5, 0), (5, 0),  // Adjacent pixels
+            (-5, -5), (5, -5), (-5, 5), (5, 5)  // Diagonals
+        ]
+
+        for offset in offsets {
+            let adjustedPoint = CGPoint(x: point.x + offset.x, y: point.y + offset.y)
+            if let element = queryElementAtExactPosition(adjustedPoint) {
+                os_log("✅ Found element at offset (%{public}f, %{public}f) from original position",
+                       log: .accessibility, type: .debug, offset.x, offset.y)
+                return element
+            }
+        }
+
+        os_log("⚠️  No element found at position (%{public}f, %{public}f) or nearby offsets",
+               log: .accessibility, type: .debug, point.x, point.y)
+        return nil
+    }
+
+    /// Query element at exact position without fallback
+    private func queryElementAtExactPosition(_ point: CGPoint) -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
         var element: AXUIElement?
 
@@ -164,12 +203,7 @@ class AccessibilityElementExtractor {
             &element
         )
 
-        guard result == .success else {
-            os_log("⚠️  Failed to get element at position (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
-            return nil
-        }
-
-        return element
+        return result == .success ? element : nil
     }
 
     // MARK: - Element Attributes
@@ -374,171 +408,140 @@ class AccessibilityElementExtractor {
     /// ```
     func getCursorScreenPosition(from element: AXUIElement? = nil) -> Result<CGPoint, AccessibilityError> {
         // Use provided element, or try to get focused element
-        var focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
+        let focusedElement = element ?? getFocusedElement(from: AXUIElementCreateSystemWide())
 
-        // Strategy 0: If no focused element, try to find element at mouse position
-        // This is critical for web browsers where getFocusedElement() fails but
-        // we can still find the text input element via getElementAtPosition()
-        if focusedElement == nil {
-            os_log("⚠️  No focused element, trying element at mouse position for better positioning", log: .accessibility, type: .debug)
-            let mousePosition = NSEvent.mouseLocation
+        // Delegate to the CursorPositionResolver which implements the strategy chain
+        // See CursorPositionStrategies.swift for the strategy implementations:
+        // 1. BoundsForRangeStrategy (most accurate)
+        // 2. ElementPositionStrategy (fallback)
+        // 3. MousePositionStrategy (ultimate fallback)
+        let position = cursorPositionResolver.resolve(from: focusedElement)
+        return .success(position)
+    }
 
-            // Convert mouse position from NSScreen coords (bottom-left origin) to Accessibility coords (top-left origin)
-            // to use with getElementAtPosition()
-            if let screen = NSScreen.screens.first(where: { NSMouseInRect(mousePosition, $0.frame, false) }) ?? NSScreen.main {
-                let accessibilityY = screen.frame.height - (mousePosition.y - screen.frame.origin.y)
-                let accessibilityPoint = CGPoint(x: mousePosition.x, y: accessibilityY)
+    // MARK: - Application Detection
 
-                os_log("📍 Mouse position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
-                os_log("📍 Mouse position (Accessibility): (%{public}f, %{public}f)", log: .accessibility, type: .debug, accessibilityPoint.x, accessibilityY)
+    /// Bundle identifiers for apps that need clipboard-based fallback
+    private static let clipboardFallbackApps: Set<String> = [
+        "com.apple.Terminal",           // Terminal.app
+        "com.microsoft.VSCode",          // VSCode
+        "com.microsoft.VSCodeInsiders",  // VSCode Insiders
+        "com.googlecode.iterm2",         // iTerm2
+        "com.github.atom",               // Atom
+        "dev.warp.Warp-Stable",          // Warp Terminal
+        "com.jetbrains.intellij",        // IntelliJ IDEA
+        "com.jetbrains.WebStorm",        // WebStorm
+        "com.jetbrains.PhpStorm",        // PhpStorm
+    ]
 
-                if let elementAtMouse = getElementAtPosition(accessibilityPoint) {
-                    os_log("✅ Found element at mouse position, using for position calculation", log: .accessibility, type: .debug)
-                    focusedElement = elementAtMouse
-                }
+    /// Check if the frontmost app needs clipboard-based fallback
+    func needsClipboardFallback() -> Bool {
+        guard let frontApp = NSWorkspace.shared.frontmostApplication,
+              let bundleId = frontApp.bundleIdentifier else {
+            return false
+        }
+
+        let needsFallback = Self.clipboardFallbackApps.contains(bundleId)
+        if needsFallback {
+            os_log("📋 Frontmost app '%{public}@' (%{public}@) needs clipboard fallback", log: .accessibility, type: .info,
+                   frontApp.localizedName ?? "unknown", bundleId)
+        }
+        return needsFallback
+    }
+
+    // MARK: - Clipboard-Based Word Extraction
+
+    /// Extract word at cursor using clipboard-based approach
+    /// This is a fallback for apps like Terminal and VSCode that don't expose text via AX API
+    ///
+    /// Algorithm:
+    /// 1. Save current clipboard content
+    /// 2. Send Option+Shift+Left Arrow (select word to the left)
+    /// 3. Send Cmd+C (copy selected text)
+    /// 4. Read clipboard as word at cursor
+    /// 5. Send Right Arrow (deselect)
+    /// 6. Restore original clipboard content
+    ///
+    /// - Returns: Result with TextContext or error
+    func extractTextContextViaClipboard() -> Result<TextContext, AccessibilityError> {
+        os_log("📋 Using clipboard-based text extraction", log: .accessibility, type: .info)
+
+        // Save current clipboard content
+        let pasteboard = NSPasteboard.general
+        let savedTypes = pasteboard.types ?? []
+        var savedContents: [NSPasteboard.PasteboardType: Data] = [:]
+        for type in savedTypes {
+            if let data = pasteboard.data(forType: type) {
+                savedContents[type] = data
             }
         }
 
-        guard let focusedElement = focusedElement else {
-            os_log("⚠️  No focused element for cursor position, using mouse position as final fallback", log: .accessibility, type: .debug)
-            // Ultimate fallback to mouse cursor position
-            let mousePosition = NSEvent.mouseLocation
-            os_log("📍 Using raw mouse position: (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
-            return .success(mousePosition)
-        }
+        // Clear clipboard for our operation
+        pasteboard.clearContents()
 
-        // Strategy 1: Get bounds for selected text range (most accurate)
-        if let selectedRangeValue = getAttributeValue(focusedElement, attribute: kAXSelectedTextRangeAttribute as CFString) {
-            // Extract CFRange from AXValue
-            let axValue = selectedRangeValue as! AXValue
-            var range = CFRange()
-            let rangeSuccess = AXValueGetValue(axValue, .cfRange, &range)
+        // Small delay to ensure clipboard is ready
+        usleep(10000) // 10ms
 
-            if rangeSuccess {
-                os_log("📍 Selected range: location=%{public}d, length=%{public}d", log: .accessibility, type: .debug, range.location, range.length)
+        // Send Option+Shift+Left Arrow (select word to the left)
+        // This selects the word before the cursor in most text editors
+        simulateKeyPress(keyCode: 123, modifiers: [.maskShift, .maskAlternate]) // Left Arrow with Shift+Option
+        usleep(50000) // 50ms delay for selection to complete
 
-                // Create AXValue for the range parameter
-                var mutableRange = range
-                guard let rangeAXValue = AXValueCreate(.cfRange, &mutableRange) else {
-                    return .failure(.axApiFailed(attribute: "AXBoundsForRange", code: -1))
-                }
+        // Send Cmd+C (copy)
+        simulateKeyPress(keyCode: 8, modifiers: [.maskCommand]) // 'c' key with Cmd
+        usleep(50000) // 50ms delay for clipboard to update
 
-                // Get bounds for this range
-                var boundsValue: CFTypeRef?
-                let boundsResult = AXUIElementCopyParameterizedAttributeValue(
-                    focusedElement,
-                    kAXBoundsForRangeParameterizedAttribute as CFString,
-                    rangeAXValue,
-                    &boundsValue
-                )
+        // Read clipboard content
+        let wordAtCursor = pasteboard.string(forType: .string) ?? ""
 
-                if boundsResult == .success, let boundsValue = boundsValue {
-                    // Extract CGRect from the bounds AXValue
-                    var bounds = CGRect.zero
-                    let boundsAXValue = boundsValue as! AXValue
-                    let boundsSuccess = AXValueGetValue(boundsAXValue, .cgRect, &bounds)
+        os_log("📋 Extracted word via clipboard: '%{private}@'", log: .accessibility, type: .debug, wordAtCursor)
 
-                    if boundsSuccess {
-                        os_log("📍 Cursor bounds rect (Accessibility coords): origin(%{public}f, %{public}f) size(%{public}f × %{public}f)", log: .accessibility, type: .debug, bounds.origin.x, bounds.origin.y, bounds.width, bounds.height)
+        // Send Right Arrow to deselect and restore cursor position
+        simulateKeyPress(keyCode: 124, modifiers: []) // Right Arrow
+        usleep(10000) // 10ms
 
-                        // Accessibility API uses top-left origin (Y increases downward)
-                        // NSScreen uses bottom-left origin (Y increases upward)
-                        // Need to convert: screenY = screenHeight - accessibilityY
-
-                        // CRITICAL: Find the screen that contains this cursor position
-                        // We can't use NSScreen.main because cursor might be on a different screen
-                        let cursorAccessibilityPoint = CGPoint(x: bounds.origin.x, y: bounds.origin.y)
-                        let containingScreen = NSScreen.screens.first { screen in
-                            // Convert screen frame to Accessibility coordinates for comparison
-                            // Accessibility: top-left origin, Y increases downward
-                            // NSScreen: bottom-left origin, Y increases upward
-                            // For a screen, Accessibility Y=0 corresponds to NSScreen Y=screenHeight
-                            let screenAccessibilityMinY: CGFloat = 0  // Top of screen in Accessibility coords
-                            let screenAccessibilityMaxY = screen.frame.height  // Bottom of screen in Accessibility coords
-                            let screenAccessibilityMinX = screen.frame.origin.x
-                            let screenAccessibilityMaxX = screen.frame.origin.x + screen.frame.width
-
-                            let containsPoint = cursorAccessibilityPoint.x >= screenAccessibilityMinX &&
-                                               cursorAccessibilityPoint.x <= screenAccessibilityMaxX &&
-                                               cursorAccessibilityPoint.y >= screenAccessibilityMinY &&
-                                               cursorAccessibilityPoint.y <= screenAccessibilityMaxY
-
-                            os_log("🖥️  Screen check: frame=%{public}@, contains=(%{public}d)", log: .accessibility, type: .debug, String(describing: screen.frame), containsPoint)
-                            return containsPoint
-                        } ?? NSScreen.main
-
-                        guard let targetScreen = containingScreen else {
-                            os_log("⚠️  Could not find any screen for coordinate conversion", log: .accessibility, type: .error)
-                            return .failure(.axApiFailed(attribute: "screen", code: -1))
-                        }
-
-                        os_log("🖥️  Using screen: frame=%{public}@", log: .accessibility, type: .debug, String(describing: targetScreen.frame))
-
-                        let screenHeight = targetScreen.frame.height
-                        let screenOriginX = targetScreen.frame.origin.x
-                        let cursorX = bounds.origin.x
-                        let cursorBottomY = bounds.maxY  // Bottom of cursor in Accessibility coords
-
-                        // Convert to NSScreen coordinate system
-                        // In NSScreen coordinates, this screen's bottom-left is at (screenOriginX, screenOriginY)
-                        let screenY = targetScreen.frame.origin.y + (screenHeight - cursorBottomY)
-                        let cursorPosition = CGPoint(x: cursorX, y: screenY)
-
-                        os_log("📍 Cursor position (Accessibility): (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorX, cursorBottomY)
-                        os_log("📍 Cursor position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, cursorPosition.x, cursorPosition.y)
-                        os_log("🖥️  Screen height: %{public}f, origin: (%{public}f, %{public}f)", log: .accessibility, type: .debug, screenHeight, screenOriginX, targetScreen.frame.origin.y)
-                        return .success(cursorPosition)
-                    }
-                }
+        // Restore original clipboard content
+        pasteboard.clearContents()
+        if !savedContents.isEmpty {
+            for (type, data) in savedContents {
+                pasteboard.setData(data, forType: type)
             }
         }
 
-        // Strategy 2: Get element position as fallback
-        // NOTE: This returns the TOP-LEFT corner of the element, not the text cursor position
-        // For text fields, this is usually close enough, but for browser address bars it may be imprecise
-        if let positionValue = getAttributeValue(focusedElement, attribute: kAXPositionAttribute as CFString) {
-            let axValue = positionValue as! AXValue
-            var point = CGPoint.zero
-            let success = AXValueGetValue(axValue, .cgPoint, &point)
-
-            if success {
-                os_log("📍 Element position (Accessibility coords - raw): (%{public}f, %{public}f)", log: .accessibility, type: .debug, point.x, point.y)
-
-                // Accessibility API coordinates use screen-relative positioning where:
-                // - X=0 is the left edge of the leftmost screen
-                // - Y=0 is the TOP of the main screen (primary display)
-                // - Y increases DOWNWARD
-                //
-                // NSScreen coordinates use:
-                // - X=0 is the left edge of the leftmost screen
-                // - Y=0 is the BOTTOM of the main screen
-                // - Y increases UPWARD
-                //
-                // The main screen (primary display) has frame.origin.y = 0 in NSScreen coords
-
-                // Get the main screen height for coordinate conversion
-                guard let mainScreen = NSScreen.screens.first else {
-                    os_log("⚠️  No screens available for coordinate conversion", log: .accessibility, type: .error)
-                    return .failure(.axApiFailed(attribute: "screen", code: -1))
-                }
-
-                // Convert Y coordinate: NSScreen Y = mainScreenHeight - accessibilityY
-                // This converts from top-left origin to bottom-left origin
-                let mainScreenHeight = mainScreen.frame.height + mainScreen.frame.origin.y
-                let nsScreenY = mainScreenHeight - point.y
-                let convertedPoint = CGPoint(x: point.x, y: nsScreenY)
-
-                os_log("📍 Element position (NSScreen): (%{public}f, %{public}f)", log: .accessibility, type: .debug, convertedPoint.x, convertedPoint.y)
-                os_log("🖥️  Main screen height (for conversion): %{public}f", log: .accessibility, type: .debug, mainScreenHeight)
-                os_log("⚠️  Using element position as fallback (Strategy 2)", log: .accessibility, type: .debug)
-                return .success(convertedPoint)
-            }
+        // If we got no word, the fallback didn't work
+        if wordAtCursor.isEmpty {
+            os_log("⚠️  Clipboard-based extraction returned empty word", log: .accessibility, type: .debug)
+            // Return a minimal context - user may be at start of line or in empty field
         }
 
-        // Strategy 3: Ultimate fallback to mouse cursor position
-        // This is the most reliable for browsers where other strategies fail
-        let mousePosition = NSEvent.mouseLocation
-        os_log("📍 Using mouse position as fallback (Strategy 3): (%{public}f, %{public}f)", log: .accessibility, type: .debug, mousePosition.x, mousePosition.y)
-        return .success(mousePosition)
+        // Create TextContext with limited information (we don't have full text)
+        let context = TextContext(
+            fullText: wordAtCursor,  // We only have the word
+            selectedText: nil,
+            textBeforeCursor: wordAtCursor,
+            textAfterCursor: "",
+            wordAtCursor: wordAtCursor,
+            cursorPosition: wordAtCursor.count,
+            selectedRange: nil
+        )
+
+        return .success(context)
+    }
+
+    /// Simulate a key press with modifiers using CGEvent
+    private func simulateKeyPress(keyCode: CGKeyCode, modifiers: CGEventFlags) {
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+            os_log("❌ Failed to create CGEvent for key press", log: .accessibility, type: .error)
+            return
+        }
+
+        keyDown.flags = modifiers
+        keyUp.flags = modifiers
+
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 }
