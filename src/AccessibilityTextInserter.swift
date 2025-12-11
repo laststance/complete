@@ -29,6 +29,20 @@ class AccessibilityTextInserter {
             return false
         }
 
+        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, completion, context.wordAtCursor)
+
+        // For Terminal, VSCode and similar apps, use CGEvent simulation directly
+        // These apps don't properly support AX API text manipulation
+        if elementExtractor.needsClipboardFallback() {
+            os_log("📋 Using CGEvent simulation for clipboard-fallback app", log: .accessibility, type: .info)
+            if simulateKeystrokeInsertion(completion, context: context) {
+                os_log("✅ Insertion successful via CGEvent simulation", log: .accessibility, type: .debug)
+                return true
+            }
+            os_log("❌ CGEvent insertion failed for clipboard-fallback app", log: .accessibility, type: .error)
+            return false
+        }
+
         let systemWide = AXUIElementCreateSystemWide()
 
         // Try to get focused element (works for native apps)
@@ -54,11 +68,15 @@ class AccessibilityTextInserter {
         }
 
         guard let element = focusedElement else {
+            // No focused element, try CGEvent simulation as last resort
+            os_log("⚠️  No focused element, attempting CGEvent simulation", log: .accessibility, type: .debug)
+            if simulateKeystrokeInsertion(completion, context: context) {
+                os_log("✅ Insertion successful via CGEvent simulation (no element fallback)", log: .accessibility, type: .debug)
+                return true
+            }
             os_log("❌ No focused element for text insertion", log: .accessibility, type: .error)
             return false
         }
-
-        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, completion, context.wordAtCursor)
 
         // Strategy 1: Try direct AX API replacement (fastest, ~10-20ms)
         if let success = tryDirectReplacement(completion, context: context, element: element), success {
