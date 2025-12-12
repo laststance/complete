@@ -378,6 +378,61 @@ final class CursorPositionResolverTests: XCTestCase {
     }
 }
 
+// MARK: - BrowserAccessibilityEnabler Tests
+
+final class BrowserAccessibilityEnablerTests: XCTestCase {
+
+    var enabler: BrowserAccessibilityEnabler!
+
+    override func setUp() {
+        super.setUp()
+        enabler = BrowserAccessibilityEnabler()
+    }
+
+    func testIsBrowserOrElectronApp_NotBrowser() {
+        // When: Running tests (not in a browser)
+        // The frontmost app should be Xcode or Terminal, not a browser
+        let result = enabler.isBrowserOrElectronApp()
+
+        // Then: Xcode/Terminal are not browsers
+        // This test passes when running in Xcode or Terminal
+        // It would fail if run inside Chrome DevTools console
+        XCTAssertFalse(result, "Xcode/Terminal should not be detected as browser")
+    }
+
+    func testEnableIfNeeded_NonBrowserApp() {
+        // When: Not in a browser app
+        let result = enabler.enableIfNeeded()
+
+        // Then: Should return false (no enabling needed)
+        XCTAssertFalse(result, "enableIfNeeded should return false for non-browser apps")
+    }
+
+    func testClearCache() {
+        // Given: Enable some cached state
+        _ = enabler.enableIfNeeded()
+
+        // When: Clearing cache
+        enabler.clearCache()
+
+        // Then: Should complete without crash
+        // (Cache is private, so we just verify no crash)
+        XCTAssertFalse(enabler.enableIfNeeded())
+    }
+
+    func testGetAppElement_ValidPid() {
+        // Given: Current process PID
+        let pid = ProcessInfo.processInfo.processIdentifier
+
+        // When: Getting app element
+        let element = enabler.getAppElement(for: pid)
+
+        // Then: Should return a valid AXUIElement (non-nil reference)
+        // We can't easily verify it's valid without permission, but it shouldn't crash
+        XCTAssertNotNil(element, "Should return an AXUIElement reference")
+    }
+}
+
 // MARK: - Integration Tests
 
 final class CursorPositionIntegrationTests: XCTestCase {

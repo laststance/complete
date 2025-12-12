@@ -8,6 +8,7 @@ class AccessibilityElementExtractor {
 
     private let permissionManager: AccessibilityPermissionManager
     private let cursorPositionResolver: CursorPositionResolver
+    private let browserEnabler = BrowserAccessibilityEnabler()
 
     /// Creates an AccessibilityElementExtractor with required dependencies.
     ///
@@ -65,6 +66,15 @@ class AccessibilityElementExtractor {
     func extractTextContext() -> Result<TextContext, AccessibilityError> {
         guard permissionManager.checkPermissionStatus() else {
             return .failure(.permissionDenied)
+        }
+
+        // CRITICAL: Enable browser accessibility BEFORE querying any attributes
+        // This sets AXEnhancedUserInterface for Chrome/Safari and
+        // AXManualAccessibility for Electron apps (VSCode, Slack, etc.)
+        if browserEnabler.isBrowserOrElectronApp() {
+            browserEnabler.enableIfNeeded()
+            os_log("🌐 extractTextContext: Browser/Electron app detected, accessibility enabled",
+                   log: .accessibility, type: .info)
         }
 
         // Get system-wide accessibility element

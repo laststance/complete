@@ -171,6 +171,12 @@ final class BoundsForRangeStrategy: CursorPositionStrategy {
         os_log("📍 [%{public}@] Cursor bounds (Accessibility): origin(%{public}f, %{public}f) size(%{public}f × %{public}f)",
                log: .accessibility, type: .debug, name, rect.origin.x, rect.origin.y, rect.width, rect.height)
 
+        // Validate bounds - browsers often return invalid coordinates
+        if !isValidCursorBounds(rect) {
+            os_log("⚠️  [%{public}@] Invalid cursor bounds detected, rejecting", log: .accessibility, type: .debug, name)
+            return nil
+        }
+
         // Find the screen containing this cursor position
         let cursorAccessibilityPoint = CGPoint(x: rect.origin.x, y: rect.maxY)
         guard let containingScreen = converter.findContainingScreen(for: cursorAccessibilityPoint)
@@ -186,6 +192,42 @@ final class BoundsForRangeStrategy: CursorPositionStrategy {
                log: .accessibility, type: .debug, name, cursorPosition.x, cursorPosition.y)
 
         return cursorPosition
+    }
+
+    /// Validates cursor bounds to detect browser-specific failures.
+    ///
+    /// Web browsers often return invalid coordinates for AXBoundsForRange:
+    /// - Chrome/Electron may return (0,0) origin
+    /// - Some apps return element bounds instead of cursor bounds
+    /// - Bounds larger than screen indicate failure
+    ///
+    /// - Parameter bounds: The CGRect returned by AXBoundsForRange
+    /// - Returns: `true` if bounds appear valid, `false` if they should be rejected
+    private func isValidCursorBounds(_ bounds: CGRect) -> Bool {
+        // Reject if at origin (common failure case for browsers)
+        if bounds.origin == .zero && bounds.size.width > 100 {
+            os_log("🔍 BoundsForRange: Rejecting bounds at origin with large width (likely element bounds, not cursor)",
+                   log: .accessibility, type: .debug)
+            return false
+        }
+
+        // Reject negative coordinates (should never happen)
+        if bounds.origin.x < -10000 || bounds.origin.y < -10000 {
+            return false
+        }
+
+        // Reject if bounds are unreasonably large (larger than any reasonable screen)
+        if bounds.width > 10000 || bounds.height > 10000 {
+            return false
+        }
+
+        // Reject if bounds are too small to be meaningful
+        // A cursor should have at least 1x1 pixel bounds
+        if bounds.width < 0.5 && bounds.height < 0.5 {
+            return false
+        }
+
+        return true
     }
 }
 
@@ -279,6 +321,12 @@ final class MousePositionStrategy: CursorPositionStrategy {
 /// The resolver maintains a prioritized list of strategies and returns the first
 /// successful result. This implements the Chain of Responsibility pattern.
 ///
+/// ## Browser Support Enhancement
+/// Before trying strategies, the resolver enables browser accessibility trees
+/// via `BrowserAccessibilityEnabler`. This sets `AXEnhancedUserInterface` for
+/// Chrome/Safari and `AXManualAccessibility` for Electron apps, which unlocks
+/// their accessibility APIs.
+///
 /// ## Default Strategy Order
 /// 1. BoundsForRangeStrategy (most accurate)
 /// 2. ElementPositionStrategy (fallback)
@@ -294,6 +342,7 @@ final class MousePositionStrategy: CursorPositionStrategy {
 final class CursorPositionResolver {
     private let strategies: [CursorPositionStrategy]
     private let converter = CoordinateConverter()
+    private let browserEnabler = BrowserAccessibilityEnabler()
 
     /// Creates a resolver with the default strategy chain.
     init() {
@@ -313,6 +362,10 @@ final class CursorPositionResolver {
 
     /// Resolves cursor position by trying strategies in order.
     ///
+    /// Before trying strategies, enables browser accessibility if the frontmost
+    /// app is a browser or Electron app. This is critical for Chrome/Safari/VSCode
+    /// which don't expose their accessibility tree by default.
+    ///
     /// If the provided element is nil, attempts to find an element at the mouse position
     /// before falling back to the mouse position strategy.
     ///
@@ -320,6 +373,15 @@ final class CursorPositionResolver {
     /// - Returns: Cursor position in NSScreen coordinates
     func resolve(from element: AXUIElement?) -> CGPoint {
         var workingElement = element
+
+        // CRITICAL: Enable browser accessibility BEFORE querying any attributes
+        // This sets AXEnhancedUserInterface for Chrome/Safari and
+        // AXManualAccessibility for Electron apps (VSCode, Slack, etc.)
+        if browserEnabler.isBrowserOrElectronApp() {
+            browserEnabler.enableIfNeeded()
+            os_log("🌐 CursorPositionResolver: Browser/Electron app detected, accessibility enabled",
+                   log: .accessibility, type: .info)
+        }
 
         // If no element provided, try to find element at mouse position
         if workingElement == nil {
