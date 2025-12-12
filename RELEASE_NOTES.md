@@ -1,6 +1,33 @@
-# Complete v0.1.1 - Bug Fixes & Visual Testing
+# Complete v0.1.2 - Browser Positioning Fix
 
 System-wide spell autocomplete for macOS, triggered by global hotkey.
+
+## What's New in v0.1.2
+
+### Bug Fixes
+- **Fixed browser form input positioning (Issues #18, #19)**: Popup now appears near text cursor in browser textareas and input fields
+- **Strategy pattern fix**: Skip ElementPositionStrategy for browsers (was returning element corner instead of cursor position)
+- **AppleScript test path fix**: Corrected path calculation in visual regression test modules
+
+### Infrastructure
+- **Multi-app visual testing**: 16 test cases across 4 apps (TextEdit, Chrome, VSCode, Terminal)
+- **GitHub Actions CI/CD**: Automated build and unit tests on every push
+- **Modular AppleScript architecture**: App-specific test modules in `modules/` directory
+
+### Technical Debt
+- **Removed dead code**: Deleted unused error types (SettingsError, HotkeyError, WindowError) from ErrorTypes.swift (-117 lines)
+- **Cleaned up .gitignore**: Added .playwright-mcp/
+
+## Changes Since v0.1.1
+
+### Commits
+- `8602382` chore: update landing page to v0.1.2 with direct download link
+- `78b65a9` fix: resolve browser popup positioning bug (Issues #18, #19)
+- `3539785` feat: add multi-app visual testing and GitHub Actions CI/CD
+
+---
+
+# Complete v0.1.1 - Bug Fixes & Visual Testing
 
 ## What's New in v0.1.1
 
@@ -20,6 +47,8 @@ System-wide spell autocomplete for macOS, triggered by global hotkey.
 - `e9033b8` docs: add visual regression test expectations and update documentation
 - `e7ce0f3` fix: improve popup positioning for TextEdit and Chrome browser
 - `f3b501e` fix: create proper .app bundle structure in notarize.sh
+
+---
 
 ## Features (unchanged from v0.1.0)
 

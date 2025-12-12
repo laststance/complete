@@ -5,7 +5,7 @@ System-wide spell autocomplete for macOS triggered by global hotkey (Shift+Comma
 ## Project Status
 
 **Status**: ✅ Production Ready
-**Version**: 0.1.1
+**Version**: 0.1.2
 **Completion**: 22/22 tasks (100%)
 
 ### All Features Implemented
@@ -18,7 +18,7 @@ System-wide spell autocomplete for macOS triggered by global hotkey (Shift+Comma
 - ✅ Dark mode support
 - ✅ Settings persistence
 - ✅ Cross-app compatibility (TextEdit, VSCode, Chrome, Safari, Mail)
-- ✅ Comprehensive test suite (94 tests, >80% coverage)
+- ✅ Comprehensive test suite (156 tests, >80% coverage)
 - ✅ Distribution-ready with notarization workflow
 
 ## Installation
@@ -99,7 +99,7 @@ complete/
 ├── Scripts/install-local.sh           # Local installation script
 ├── notarize.sh                        # Distribution automation script
 ├── CLAUDE.md                          # Claude Code guidance
-├── src/                               # Source code (18 files, ~4,000 lines)
+├── src/                               # Source code (21 files, ~4,500 lines)
 │   ├── main.swift                    # Application entry point
 │   ├── AppDelegate.swift             # App lifecycle (LSUIElement)
 │   ├── HotkeyManager.swift           # Global hotkey system
@@ -116,7 +116,7 @@ complete/
 │   └── Resources/
 │       ├── Info.plist                # LSUIElement = YES
 │       └── AppIcon.icns              # Application icon
-├── tests/                             # Test suite (94 tests)
+├── tests/                             # Test suite (156 tests)
 │   ├── CompleteTests.swift           # Unit tests (76)
 │   ├── IntegrationTests/             # Cross-app tests
 │   │   ├── CrossAppIntegrationTests.swift
@@ -206,7 +206,7 @@ See `docs/` for detailed research:
 
 ## Testing
 
-### Test Suite (94 tests, >80% coverage)
+### Test Suite (156 tests, >80% coverage)
 
 **Unit Tests** (76 tests):
 - CompletionEngine: 15 tests
