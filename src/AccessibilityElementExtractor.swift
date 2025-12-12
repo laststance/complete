@@ -464,7 +464,26 @@ class AccessibilityElementExtractor {
     /// Extract word at cursor using clipboard-based approach
     /// This is a fallback for apps like Terminal and VSCode that don't expose text via AX API
     ///
-    /// Algorithm:
+    /// IMPORTANT: For Terminal apps, we use Control+W (delete word) + Control+Y (yank/undo)
+    /// instead of arrow keys, because arrow keys produce escape sequences in Terminal!
+    ///
+    /// ## Terminal-Safe Algorithm (no arrow keys)
+    /// 1. Save current clipboard content
+    /// 2. Send Control+W (delete word backward - shell native)
+    /// 3. Send Control+Y (yank - restore deleted word)
+    /// 4. Send Cmd+A then Cmd+C to copy... no wait, that's too much
+    ///
+    /// Actually for Terminal, we use Option+Shift+Left which DOES produce escape sequences.
+    /// But we've found that Terminal text extraction is fundamentally broken with CGEvents.
+    ///
+    /// ## WORKAROUND FOR TERMINAL
+    /// For Terminal apps (com.apple.Terminal, iTerm2, etc.):
+    /// - Don't try to select text (arrow keys produce escape sequences like '[D')
+    /// - Return empty wordAtCursor
+    /// - Insertion will append completion (not replace)
+    /// - User manually handles partial word deletion
+    ///
+    /// ## VSCode Algorithm (arrow keys work)
     /// 1. Save current clipboard content
     /// 2. Send Option+Shift+Left Arrow (select word to the left)
     /// 3. Send Cmd+C (copy selected text)
@@ -476,7 +495,24 @@ class AccessibilityElementExtractor {
     func extractTextContextViaClipboard() -> Result<TextContext, AccessibilityError> {
         os_log("📋 Using clipboard-based text extraction", log: .accessibility, type: .info)
 
-        // Save current clipboard content
+        // Check if this is a true terminal app where arrow keys produce escape sequences
+        if isTerminalApp() {
+            os_log("📋 Terminal app detected - skipping arrow-based extraction (would produce escape sequences)", log: .accessibility, type: .info)
+            // Return empty context for Terminal - arrow keys don't work here
+            // The insertion will use Cmd+V only (append mode)
+            let context = TextContext(
+                fullText: "",
+                selectedText: nil,
+                textBeforeCursor: "",
+                textAfterCursor: "",
+                wordAtCursor: "",
+                cursorPosition: 0,
+                selectedRange: nil
+            )
+            return .success(context)
+        }
+
+        // For VSCode and other apps that handle arrow keys properly
         let pasteboard = NSPasteboard.general
         let savedTypes = pasteboard.types ?? []
         var savedContents: [NSPasteboard.PasteboardType: Data] = [:]
@@ -536,6 +572,34 @@ class AccessibilityElementExtractor {
         )
 
         return .success(context)
+    }
+
+    /// Check if the frontmost app is a true terminal emulator (where arrow keys produce escape sequences)
+    /// VSCode and other editors handle arrow keys properly via their accessibility layer
+    private func isTerminalApp() -> Bool {
+        guard let frontApp = NSWorkspace.shared.frontmostApplication,
+              let bundleId = frontApp.bundleIdentifier else {
+            return false
+        }
+
+        // Terminal emulators where arrow keys produce escape sequences
+        let terminalApps: Set<String> = [
+            "com.apple.Terminal",           // Terminal.app
+            "com.googlecode.iterm2",         // iTerm2
+            "dev.warp.Warp-Stable",          // Warp Terminal
+            "io.alacritty",                  // Alacritty
+            "org.alacritty",                 // Alacritty (alternative)
+            "com.github.wez.wezterm",        // WezTerm
+            "co.zeit.hyper",                 // Hyper
+            "com.qvacua.VimR",               // VimR
+            "org.vim.MacVim",                // MacVim
+        ]
+
+        let isTerminal = terminalApps.contains(bundleId)
+        if isTerminal {
+            os_log("📋 Detected terminal app: %{public}@", log: .accessibility, type: .debug, bundleId)
+        }
+        return isTerminal
     }
 
     /// Simulate a key press with modifiers using CGEvent

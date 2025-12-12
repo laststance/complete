@@ -16,6 +16,7 @@ class CompletionWindowController: NSWindowController {
     // MARK: - Properties
 
     private let accessibilityManager: AccessibilityManaging
+    private var completionEngine: CompletionProviding?
 
     /// View model managing completion state
     private let viewModel = CompletionViewModel()
@@ -73,6 +74,12 @@ class CompletionWindowController: NSWindowController {
             viewModel: viewModel,
             onSelection: { [weak self] in
                 self?.handleMouseSelection()
+            },
+            onTerminalSubmit: { [weak self] text in
+                self?.handleTerminalInputSubmit(text)
+            },
+            onTerminalCancel: { [weak self] in
+                self?.hide()
             }
         )
         let hosting = NSHostingController(rootView: completionListView)
@@ -205,9 +212,106 @@ class CompletionWindowController: NSWindowController {
         removeKeyboardMonitoring()
         removeClickMonitoring()
 
-        // Clear view model
-        viewModel.completions = []
-        viewModel.selectedIndex = 0
+        // Clear view model (including Terminal mode)
+        viewModel.clear()
+    }
+
+    /// Show Terminal input mode popup (for apps where text extraction doesn't work)
+    /// User types the word they want to complete, then we show completions
+    ///
+    /// - Parameters:
+    ///   - cursorPosition: Screen position to display near
+    ///   - completionEngine: Engine to generate completions when user submits
+    func showTerminalInputMode(near cursorPosition: CGPoint, completionEngine: CompletionProviding) {
+        os_log("🖥️ Showing Terminal input mode popup", log: .ui, type: .info)
+
+        // Save completion engine for later use
+        self.completionEngine = completionEngine
+
+        // Save reference to currently active app
+        previouslyActiveApp = NSWorkspace.shared.frontmostApplication
+        os_log("💾 Saved previously active app: %{public}@", log: .ui, type: .info, previouslyActiveApp?.localizedName ?? "unknown")
+
+        // Enter Terminal input mode
+        viewModel.enterTerminalInputMode()
+
+        // Set window size for input mode (smaller than completion list)
+        let windowWidth: CGFloat = 220
+        let windowHeight: CGFloat = 100
+
+        if let window = window {
+            var frame = window.frame
+            frame.size = NSSize(width: windowWidth, height: windowHeight)
+            window.setFrame(frame, display: false)
+        }
+
+        // Position window near cursor
+        positionWindow(near: cursorPosition)
+
+        // Activate app to receive keyboard events
+        NSApp.activate(ignoringOtherApps: true)
+
+        // Show window
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(window?.contentView)
+
+        // Note: Don't set up keyboard monitoring for Terminal input mode
+        // The TextField will handle Enter/Escape via SwiftUI onSubmit
+        // Only set up click monitoring to close on outside click
+        setupClickMonitoring()
+    }
+
+    /// Handle Terminal input submit - generate completions and show them
+    private func handleTerminalInputSubmit(_ text: String) {
+        os_log("🖥️ Terminal input submitted: '%{private}@'", log: .ui, type: .info, text)
+
+        guard !text.isEmpty, let engine = completionEngine else {
+            hide()
+            return
+        }
+
+        // Generate completions for the entered text
+        let completions = engine.completions(for: text, language: nil)
+
+        if completions.isEmpty {
+            os_log("🖥️ No completions found for Terminal input", log: .ui, type: .info)
+            NSSound.beep()
+            hide()
+            return
+        }
+
+        // Create a TextContext for the Terminal (we'll use the entered text as wordAtCursor)
+        let textContext = TextContext(
+            fullText: text,
+            selectedText: nil,
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            wordAtCursor: text,  // The word user typed becomes the word to complete
+            cursorPosition: text.count,
+            selectedRange: nil
+        )
+
+        // Exit Terminal input mode and show completions
+        viewModel.exitTerminalInputMode(with: completions, textContext: textContext)
+
+        // Now that we're in completion list mode, enable keyboard monitoring
+        setupKeyboardMonitoring()
+
+        // Resize window for completion list
+        let itemHeight: CGFloat = 22
+        let padding: CGFloat = 8
+        let shadowSpace: CGFloat = 20
+        let maxHeight: CGFloat = 600
+        let calculatedHeight = CGFloat(completions.count) * itemHeight + padding * 2 + shadowSpace
+        let finalHeight = min(maxHeight, max(100, calculatedHeight))
+
+        if let window = window {
+            var frame = window.frame
+            frame.size.height = finalHeight
+            window.setFrame(frame, display: true)
+        }
+
+        os_log("🖥️ Terminal mode: showing %d completions", log: .ui, type: .info, completions.count)
     }
 
     /// Check if window is currently visible
@@ -415,6 +519,17 @@ class CompletionWindowController: NSWindowController {
     /// - Parameter event: NSEvent to handle
     /// - Returns: The event if not handled, nil if consumed
     private func handleKeyDown(event: NSEvent) -> NSEvent? {
+        // In Terminal input mode, only handle Escape - let other keys go to TextField
+        if viewModel.isTerminalInputMode {
+            if event.keyCode == 53 { // Escape
+                hide()
+                return nil
+            }
+            // Let all other keys pass through to the TextField
+            return event
+        }
+
+        // Normal completion list mode
         switch event.keyCode {
         case 125: // Down arrow
             viewModel.selectNext()
