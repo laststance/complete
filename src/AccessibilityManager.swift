@@ -98,9 +98,16 @@ class AccessibilityManager {
     // MARK: - Text Extraction (delegate to ElementExtractor)
 
     /// Extract text context from currently focused UI element
-    /// Performance target: <50ms (typical 10-25ms per research)
+    /// Uses clipboard-based fallback for Terminal, VSCode, and similar apps
+    /// Performance target: <50ms (typical 10-25ms for native apps, 100-200ms for clipboard fallback)
     /// - Returns: Result with TextContext or AccessibilityError
     func extractTextContext() -> Result<TextContext, AccessibilityError> {
+        // Check if we need clipboard-based fallback for this app
+        if elementExtractor.needsClipboardFallback() {
+            return elementExtractor.extractTextContextViaClipboard()
+        }
+
+        // Use standard AX-based extraction for other apps
         return elementExtractor.extractTextContext()
     }
 

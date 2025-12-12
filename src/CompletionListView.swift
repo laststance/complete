@@ -8,6 +8,8 @@ struct CompletionListView: View {
 
     @ObservedObject var viewModel: CompletionViewModel
     var onSelection: (() -> Void)?
+    var onTerminalSubmit: ((String) -> Void)?
+    var onTerminalCancel: (() -> Void)?
 
     // Focus state to ensure keyboard input works immediately
     @FocusState private var isFocused: Bool
@@ -28,7 +30,20 @@ struct CompletionListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if viewModel.hasCompletions {
+            if viewModel.isTerminalInputMode {
+                // Terminal input mode: show text field for user to type word
+                TerminalInputView(
+                    text: $viewModel.terminalInputText,
+                    onSubmit: { text in
+                        onTerminalSubmit?(text)
+                    },
+                    onCancel: {
+                        onTerminalCancel?()
+                    },
+                    textColor: textColor,
+                    backgroundColor: backgroundColor
+                )
+            } else if viewModel.hasCompletions {
                 ScrollView {
                     ScrollViewReader { proxy in
                         VStack(spacing: 1) {
@@ -76,6 +91,60 @@ struct CompletionListView: View {
                 isFocused = true
             }
         }
+    }
+}
+
+// MARK: - Terminal Input View
+
+/// View for Terminal input mode - allows user to type the word they want to complete
+struct TerminalInputView: View {
+    @Binding var text: String
+    var onSubmit: (String) -> Void
+    var onCancel: (() -> Void)?
+    let textColor: Color
+    let backgroundColor: Color
+
+    @FocusState private var isInputFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Type word to complete:")
+                .font(.system(size: 11))
+                .foregroundColor(textColor.opacity(0.7))
+
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(textColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.1))
+                )
+                .focused($isInputFocused)
+                .onSubmit {
+                    if !text.isEmpty {
+                        onSubmit(text)
+                    }
+                }
+                .onKeyPress(.escape) {
+                    onCancel?()
+                    return .handled
+                }
+                .onAppear {
+                    // Auto-focus the input field
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isInputFocused = true
+                    }
+                }
+
+            Text("Enter=complete, Esc=cancel")
+                .font(.system(size: 10))
+                .foregroundColor(textColor.opacity(0.5))
+        }
+        .padding(12)
+        .frame(width: 200)
     }
 }
 

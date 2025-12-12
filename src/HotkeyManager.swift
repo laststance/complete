@@ -101,6 +101,30 @@ class HotkeyManager {
 
         if completions.isEmpty {
             os_log("No completions found for: %{private}@", log: .hotkey, type: .info, textContext.wordAtCursor)
+
+            // Check if this is a Terminal app - if so, show input mode popup
+            if TerminalDetector.isCurrentAppTerminal() {
+                os_log("🖥️ Terminal detected with no word - showing input mode", log: .hotkey, type: .info)
+
+                // Get cursor position for Terminal input popup
+                var cursorPosition: CGPoint
+                switch accessibilityManager.getCursorScreenPosition(from: nil) {
+                case .success(let position):
+                    cursorPosition = position
+                case .failure:
+                    cursorPosition = initialMousePosition
+                }
+
+                // Show Terminal input mode
+                Task { @MainActor in
+                    completionWindowController.showTerminalInputMode(
+                        near: cursorPosition,
+                        completionEngine: completionEngine
+                    )
+                }
+                return
+            }
+
             showNoCompletionsFeedback()
             return
         }

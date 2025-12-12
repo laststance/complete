@@ -17,6 +17,12 @@ class CompletionViewModel: ObservableObject {
     /// Text context for the current completion session
     var textContext: TextContext?
 
+    /// Whether we're in Terminal input mode (user types word to complete)
+    @Published var isTerminalInputMode: Bool = false
+
+    /// User-entered text in Terminal input mode
+    @Published var terminalInputText: String = ""
+
     // MARK: - Initialization
 
     init() {
@@ -67,6 +73,26 @@ class CompletionViewModel: ObservableObject {
         completions = []
         selectedIndex = 0
         textContext = nil
+        isTerminalInputMode = false
+        terminalInputText = ""
+    }
+
+    // MARK: - Terminal Input Mode
+
+    /// Enter Terminal input mode (for apps where text extraction doesn't work)
+    func enterTerminalInputMode() {
+        isTerminalInputMode = true
+        terminalInputText = ""
+        completions = []
+        selectedIndex = 0
+    }
+
+    /// Exit Terminal input mode and show completions
+    func exitTerminalInputMode(with completions: [String], textContext: TextContext) {
+        self.completions = completions
+        self.textContext = textContext
+        self.isTerminalInputMode = false
+        self.selectedIndex = 0
     }
 
     /// Check if there are any completions

@@ -29,6 +29,20 @@ class AccessibilityTextInserter {
             return false
         }
 
+        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, completion, context.wordAtCursor)
+
+        // For Terminal, VSCode and similar apps, use clipboard-based paste
+        // CGEvent keystroke simulation doesn't work properly in Terminal (produces escape sequences like '[D')
+        if elementExtractor.needsClipboardFallback() {
+            os_log("📋 Using clipboard-based paste for Terminal/VSCode app", log: .accessibility, type: .info)
+            if insertTextViaClipboard(completion, context: context) {
+                os_log("✅ Insertion successful via clipboard paste", log: .accessibility, type: .debug)
+                return true
+            }
+            os_log("❌ Clipboard-based insertion failed", log: .accessibility, type: .error)
+            return false
+        }
+
         let systemWide = AXUIElementCreateSystemWide()
 
         // Try to get focused element (works for native apps)
@@ -54,11 +68,15 @@ class AccessibilityTextInserter {
         }
 
         guard let element = focusedElement else {
+            // No focused element, try CGEvent simulation as last resort
+            os_log("⚠️  No focused element, attempting CGEvent simulation", log: .accessibility, type: .debug)
+            if simulateKeystrokeInsertion(completion, context: context) {
+                os_log("✅ Insertion successful via CGEvent simulation (no element fallback)", log: .accessibility, type: .debug)
+                return true
+            }
             os_log("❌ No focused element for text insertion", log: .accessibility, type: .error)
             return false
         }
-
-        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, completion, context.wordAtCursor)
 
         // Strategy 1: Try direct AX API replacement (fastest, ~10-20ms)
         if let success = tryDirectReplacement(completion, context: context, element: element), success {
@@ -74,6 +92,96 @@ class AccessibilityTextInserter {
 
         os_log("❌ Text insertion failed", log: .accessibility, type: .error)
         return false
+    }
+
+    // MARK: - Clipboard-Based Insertion
+
+    /// Insert text via clipboard paste - for Terminal, VSCode and similar apps
+    ///
+    /// CGEvent keystroke simulation doesn't work properly in Terminal because:
+    /// - Terminal uses PTY (pseudo-terminal) which expects TTY-style input
+    /// - CGEvents are HID-layer events that don't translate well to PTY
+    /// - Result: Escape sequences like '[D' appear instead of intended text
+    /// - Shift+Arrow keys also produce escape sequences in Terminal!
+    ///
+    /// This method uses shell-native commands:
+    /// - Control+W: Delete word backward (built-in bash/zsh command)
+    /// - Cmd+V: Paste from clipboard
+    ///
+    /// ## Algorithm
+    /// 1. Save current clipboard content
+    /// 2. Delete partial word using Control+W (shell-native backward-kill-word)
+    /// 3. Copy completion text to clipboard
+    /// 4. Paste (Cmd+V) - inserts completion
+    /// 5. Restore original clipboard content
+    ///
+    /// - Parameters:
+    ///   - completion: The completion text to insert
+    ///   - context: Current text context containing `wordAtCursor` to replace
+    /// - Returns: `true` if successful, `false` otherwise
+    private func insertTextViaClipboard(_ completion: String, context: TextContext) -> Bool {
+        os_log("📋 Starting clipboard-based insertion for Terminal/VSCode", log: .accessibility, type: .info)
+
+        let pasteboard = NSPasteboard.general
+
+        // Step 1: Save current clipboard content
+        let savedTypes = pasteboard.types ?? []
+        var savedContents: [NSPasteboard.PasteboardType: Data] = [:]
+        for type in savedTypes {
+            if let data = pasteboard.data(forType: type) {
+                savedContents[type] = data
+            }
+        }
+
+        // Step 2: Delete partial word using Control+W (shell-native backward-kill-word)
+        // This is a bash/zsh built-in that works reliably in Terminal
+        // Shift+Arrow does NOT work in Terminal - it produces escape sequences like '[D'
+        if !context.wordAtCursor.isEmpty {
+            os_log("📋 Deleting partial word with Control+W: '%{private}@'", log: .accessibility, type: .debug, context.wordAtCursor)
+            // Control+W sends ASCII ETB (0x17) which readline interprets as backward-kill-word
+            // Key code 13 = 'W' key
+            simulateKeyPressWithModifiers(keyCode: 13, modifiers: [.maskControl]) // Control+W
+            usleep(30000) // 30ms delay for word deletion to complete
+        }
+
+        // Step 3: Copy completion text to clipboard
+        pasteboard.clearContents()
+        pasteboard.setString(completion, forType: .string)
+        usleep(10000) // 10ms delay for clipboard
+
+        // Step 4: Paste (Cmd+V) - inserts the completion text
+        os_log("📋 Pasting completion via Cmd+V: '%{private}@'", log: .accessibility, type: .debug, completion)
+        simulateKeyPressWithModifiers(keyCode: 9, modifiers: [.maskCommand]) // Cmd+V
+        usleep(50000) // 50ms delay for paste to complete
+
+        // Step 5: Restore original clipboard content
+        pasteboard.clearContents()
+        if !savedContents.isEmpty {
+            for (type, data) in savedContents {
+                pasteboard.setData(data, forType: type)
+            }
+        }
+
+        os_log("✅ Clipboard-based insertion completed", log: .accessibility, type: .debug)
+        return true
+    }
+
+    /// Simulate a key press with modifier keys using CGEvent
+    /// Used for clipboard operations (Cmd+V, Shift+Left, etc.)
+    private func simulateKeyPressWithModifiers(keyCode: CGKeyCode, modifiers: CGEventFlags) {
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+            os_log("❌ Failed to create CGEvent for key press with modifiers", log: .accessibility, type: .error)
+            return
+        }
+
+        keyDown.flags = modifiers
+        keyUp.flags = modifiers
+
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 
     // MARK: - Direct AX API Methods

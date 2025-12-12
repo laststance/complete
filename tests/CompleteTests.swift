@@ -424,7 +424,18 @@ final class CompleteTests: XCTestCase {
 
     // MARK: - Permission Flow Tests
 
-    func testAccessibilityManager_RequestPermissions() {
+    /// Helper to check if we're running in a headless/CI environment
+    private var isHeadlessEnvironment: Bool {
+        // Skip UI tests when running in CI or when no GUI is available
+        return ProcessInfo.processInfo.environment["CI"] != nil ||
+               ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil ||
+               NSApp == nil
+    }
+
+    func testAccessibilityManager_RequestPermissions() throws {
+        // Skip in headless environment - this test shows a UI dialog
+        try XCTSkipIf(isHeadlessEnvironment, "Skipping UI dialog test in headless environment")
+
         let accessibilityManager = AccessibilityManager()
         // Verify requestPermissions doesn't crash
         // Note: Shows UI dialog in test environment, but shouldn't crash
@@ -433,7 +444,10 @@ final class CompleteTests: XCTestCase {
         XCTAssertTrue(true, "requestPermissions should complete without crash")
     }
 
-    func testAccessibilityManager_ShowPermissionDeniedAlert() {
+    func testAccessibilityManager_ShowPermissionDeniedAlert() throws {
+        // Skip in headless environment - this test shows a UI dialog
+        try XCTSkipIf(isHeadlessEnvironment, "Skipping UI dialog test in headless environment")
+
         let accessibilityManager = AccessibilityManager()
         // Verify alert method doesn't crash
         accessibilityManager.showPermissionDeniedAlert()
