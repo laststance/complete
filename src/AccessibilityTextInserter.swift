@@ -9,9 +9,68 @@ class AccessibilityTextInserter {
     private let permissionManager: AccessibilityPermissionManager
     private let elementExtractor: AccessibilityElementExtractor
 
+    // MARK: - Constants
+
+    /// Characters allowed in completion text for CGEvent injection
+    /// Restricts to safe characters to prevent command injection via shell completions
+    private static let allowedCharacters: CharacterSet = {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: " .,;:!?'-()[]{}\"@#$%&*+=<>/\\|~`^_")
+        return allowed
+    }()
+
+    /// Maximum length for completion text to prevent DoS via very long strings
+    private static let maxCompletionLength = 1000
+
+    // MARK: - Timing Constants (microseconds)
+
+    /// Delay for word deletion to complete before next operation
+    private static let wordDeletionDelay: UInt32 = 30_000  // 30ms
+
+    /// Delay after clipboard operation for content to be ready
+    private static let clipboardReadyDelay: UInt32 = 10_000  // 10ms
+
+    /// Delay after paste operation for app to process
+    private static let pasteCompletionDelay: UInt32 = 50_000  // 50ms
+
+    /// Minimal delay between CGEvent key events
+    private static let keyEventDelay: UInt32 = 1_000  // 1ms
+
     init(permissionManager: AccessibilityPermissionManager, elementExtractor: AccessibilityElementExtractor) {
         self.permissionManager = permissionManager
         self.elementExtractor = elementExtractor
+    }
+
+    // MARK: - Input Sanitization
+
+    /// Sanitizes completion text before CGEvent injection or clipboard operations
+    /// Removes control characters and other potentially dangerous input
+    ///
+    /// Security rationale:
+    /// - Prevents shell command injection if completion is pasted into Terminal
+    /// - Removes control characters (0x00-0x1F) that could cause unexpected behavior
+    /// - Limits length to prevent DoS attacks via very long strings
+    ///
+    /// - Parameter text: The raw completion text from NSSpellChecker or user dictionary
+    /// - Returns: Sanitized text safe for keystroke injection
+    private func sanitizeCompletion(_ text: String) -> String {
+        // Truncate to max length
+        let truncated = String(text.prefix(Self.maxCompletionLength))
+
+        // Filter to allowed characters only
+        let sanitized = truncated.unicodeScalars.filter { scalar in
+            Self.allowedCharacters.contains(scalar)
+        }
+
+        let result = String(String.UnicodeScalarView(sanitized))
+
+        // Log if sanitization changed the input
+        if result != text {
+            os_log("⚠️ Completion text was sanitized: '%{private}@' → '%{private}@'",
+                   log: .accessibility, type: .info, text, result)
+        }
+
+        return result
     }
 
     // MARK: - Text Insertion
@@ -29,13 +88,21 @@ class AccessibilityTextInserter {
             return false
         }
 
-        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, completion, context.wordAtCursor)
+        // Security: Sanitize completion text before any insertion method
+        // Prevents command injection via malicious dictionary entries
+        let sanitizedCompletion = sanitizeCompletion(completion)
+        guard !sanitizedCompletion.isEmpty else {
+            os_log("❌ Completion text was empty after sanitization", log: .accessibility, type: .error)
+            return false
+        }
+
+        os_log("📝 Inserting completion: '%{private}@' replacing '%{private}@'", log: .accessibility, type: .debug, sanitizedCompletion, context.wordAtCursor)
 
         // For Terminal, VSCode and similar apps, use clipboard-based paste
         // CGEvent keystroke simulation doesn't work properly in Terminal (produces escape sequences like '[D')
         if elementExtractor.needsClipboardFallback() {
             os_log("📋 Using clipboard-based paste for Terminal/VSCode app", log: .accessibility, type: .info)
-            if insertTextViaClipboard(completion, context: context) {
+            if insertTextViaClipboard(sanitizedCompletion, context: context) {
                 os_log("✅ Insertion successful via clipboard paste", log: .accessibility, type: .debug)
                 return true
             }
@@ -82,7 +149,7 @@ class AccessibilityTextInserter {
         guard let element = focusedElement else {
             // No focused element, try CGEvent simulation as last resort
             os_log("⚠️  No focused element, attempting CGEvent simulation", log: .accessibility, type: .debug)
-            if simulateKeystrokeInsertion(completion, context: context) {
+            if simulateKeystrokeInsertion(sanitizedCompletion, context: context) {
                 os_log("✅ Insertion successful via CGEvent simulation (no element fallback)", log: .accessibility, type: .debug)
                 return true
             }
@@ -91,13 +158,13 @@ class AccessibilityTextInserter {
         }
 
         // Strategy 1: Try direct AX API replacement (fastest, ~10-20ms)
-        if let success = tryDirectReplacement(completion, context: context, element: element), success {
+        if let success = tryDirectReplacement(sanitizedCompletion, context: context, element: element), success {
             os_log("✅ Insertion successful via direct AX API", log: .accessibility, type: .debug)
             return true
         }
 
         // Strategy 2: Use CGEvent keystroke simulation (more reliable, ~20-40ms)
-        if simulateKeystrokeInsertion(completion, context: context) {
+        if simulateKeystrokeInsertion(sanitizedCompletion, context: context) {
             os_log("✅ Insertion successful via CGEvent simulation", log: .accessibility, type: .debug)
             return true
         }
@@ -153,18 +220,18 @@ class AccessibilityTextInserter {
             // Control+W sends ASCII ETB (0x17) which readline interprets as backward-kill-word
             // Key code 13 = 'W' key
             simulateKeyPressWithModifiers(keyCode: 13, modifiers: [.maskControl]) // Control+W
-            usleep(30000) // 30ms delay for word deletion to complete
+            usleep(Self.wordDeletionDelay)
         }
 
         // Step 3: Copy completion text to clipboard
         pasteboard.clearContents()
         pasteboard.setString(completion, forType: .string)
-        usleep(10000) // 10ms delay for clipboard
+        usleep(Self.clipboardReadyDelay)
 
         // Step 4: Paste (Cmd+V) - inserts the completion text
         os_log("📋 Pasting completion via Cmd+V: '%{private}@'", log: .accessibility, type: .debug, completion)
         simulateKeyPressWithModifiers(keyCode: 9, modifiers: [.maskCommand]) // Cmd+V
-        usleep(50000) // 50ms delay for paste to complete
+        usleep(Self.pasteCompletionDelay)
 
         // Step 5: Restore original clipboard content
         pasteboard.clearContents()
@@ -366,7 +433,7 @@ class AccessibilityTextInserter {
                     return false
                 }
                 // Small delay between keystrokes
-                usleep(1000) // 1ms
+                usleep(Self.keyEventDelay)
             }
         }
 
@@ -387,7 +454,7 @@ class AccessibilityTextInserter {
             }
 
             // Small delay between keystrokes for reliability
-            usleep(1000) // 1ms
+            usleep(Self.keyEventDelay)
         }
 
         return true

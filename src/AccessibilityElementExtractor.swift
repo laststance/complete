@@ -167,6 +167,8 @@ class AccessibilityElementExtractor {
             return nil
         }
 
+        // AXUIElementCopyAttributeValue guarantees AXUIElement type for kAXFocusedUIElementAttribute
+        // Direct cast is safe as the API contract ensures correct type
         return (focusedElement as! AXUIElement)
     }
 
@@ -251,6 +253,8 @@ class AccessibilityElementExtractor {
             return nil
         }
 
+        // kAXSelectedTextRangeAttribute returns AXValue type per API contract
+        // AXValueGetValue validates the type internally and returns false if mismatched
         let axValue = rangeValue as! AXValue
         var range = CFRange(location: 0, length: 0)
         let success = AXValueGetValue(axValue, .cfRange, &range)

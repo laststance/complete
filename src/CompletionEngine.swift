@@ -12,6 +12,16 @@ import AppKit
 /// - Async completion generation
 final class CompletionEngine {
 
+    // MARK: - Cache Configuration Constants
+
+    /// Maximum number of cached completion entries
+    /// Higher values = better hit rate but more memory usage
+    private static let cacheEntryLimit = 1000
+
+    /// Maximum memory for cache in bytes (10MB)
+    /// Prevents excessive memory consumption
+    private static let cacheMemoryLimitBytes = 10 * 1024 * 1024
+
     // MARK: - Properties
 
     private let spellChecker: NSSpellChecker
@@ -45,8 +55,8 @@ final class CompletionEngine {
 
         // Configure cache limits (adjust based on memory constraints)
         // Target: 85-95% hit rate with reasonable memory usage
-        completionCache.countLimit = 1000  // Max 1000 cached entries
-        completionCache.totalCostLimit = 10 * 1024 * 1024  // 10MB max
+        completionCache.countLimit = Self.cacheEntryLimit
+        completionCache.totalCostLimit = Self.cacheMemoryLimitBytes
 
         // Initialize spell document tag
         spellDocumentTag = NSSpellChecker.uniqueSpellDocumentTag()

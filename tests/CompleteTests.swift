@@ -378,6 +378,201 @@ final class CompleteTests: XCTestCase {
         XCTAssertTrue(true, "insertCompletion method exists with correct signature")
     }
 
+    // MARK: - CompletionViewModel Tests
+
+    @MainActor
+    func testCompletionViewModel_InitialState() {
+        let viewModel = CompletionViewModel()
+
+        XCTAssertTrue(viewModel.completions.isEmpty, "Initial completions should be empty")
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Initial selected index should be 0")
+        XCTAssertNil(viewModel.textContext, "Initial text context should be nil")
+        XCTAssertFalse(viewModel.isTerminalInputMode, "Terminal input mode should be off initially")
+        XCTAssertTrue(viewModel.terminalInputText.isEmpty, "Terminal input text should be empty")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectNext_WrapsAround() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["apple", "banana", "cherry"]
+        viewModel.selectedIndex = 0
+
+        viewModel.selectNext()
+        XCTAssertEqual(viewModel.selectedIndex, 1, "Should move to index 1")
+
+        viewModel.selectNext()
+        XCTAssertEqual(viewModel.selectedIndex, 2, "Should move to index 2")
+
+        viewModel.selectNext()
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Should wrap to index 0")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectPrevious_WrapsAround() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["apple", "banana", "cherry"]
+        viewModel.selectedIndex = 0
+
+        viewModel.selectPrevious()
+        XCTAssertEqual(viewModel.selectedIndex, 2, "Should wrap to last index")
+
+        viewModel.selectPrevious()
+        XCTAssertEqual(viewModel.selectedIndex, 1, "Should move to index 1")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectAt_ClampsToValidRange() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["apple", "banana", "cherry"]
+
+        viewModel.select(at: 1)
+        XCTAssertEqual(viewModel.selectedIndex, 1, "Should select index 1")
+
+        viewModel.select(at: -5)
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Negative index should clamp to 0")
+
+        viewModel.select(at: 100)
+        XCTAssertEqual(viewModel.selectedIndex, 2, "Index beyond count should clamp to last")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectedCompletion() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["apple", "banana", "cherry"]
+
+        viewModel.selectedIndex = 0
+        XCTAssertEqual(viewModel.selectedCompletion, "apple")
+
+        viewModel.selectedIndex = 2
+        XCTAssertEqual(viewModel.selectedCompletion, "cherry")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectedCompletion_ReturnsNilForInvalidIndex() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["apple"]
+        viewModel.selectedIndex = 5 // Invalid index
+
+        XCTAssertNil(viewModel.selectedCompletion, "Should return nil for invalid index")
+    }
+
+    @MainActor
+    func testCompletionViewModel_Clear_ResetsAllState() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["apple", "banana"]
+        viewModel.selectedIndex = 1
+        viewModel.textContext = TextContext(
+            fullText: "test",
+            selectedText: nil,
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            wordAtCursor: "test",
+            cursorPosition: 0,
+            selectedRange: nil,
+            sourceElement: nil
+        )
+        viewModel.isTerminalInputMode = true
+        viewModel.terminalInputText = "hello"
+
+        viewModel.clear()
+
+        XCTAssertTrue(viewModel.completions.isEmpty, "Completions should be cleared")
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Selected index should reset to 0")
+        XCTAssertNil(viewModel.textContext, "Text context should be nil")
+        XCTAssertFalse(viewModel.isTerminalInputMode, "Terminal mode should be off")
+        XCTAssertTrue(viewModel.terminalInputText.isEmpty, "Terminal input should be empty")
+    }
+
+    @MainActor
+    func testCompletionViewModel_EnterTerminalInputMode() {
+        let viewModel = CompletionViewModel()
+        viewModel.completions = ["existing"]
+        viewModel.selectedIndex = 1
+
+        viewModel.enterTerminalInputMode()
+
+        XCTAssertTrue(viewModel.isTerminalInputMode, "Terminal mode should be enabled")
+        XCTAssertTrue(viewModel.terminalInputText.isEmpty, "Terminal input should be empty")
+        XCTAssertTrue(viewModel.completions.isEmpty, "Completions should be cleared")
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Selected index should reset")
+    }
+
+    @MainActor
+    func testCompletionViewModel_ExitTerminalInputMode() {
+        let viewModel = CompletionViewModel()
+        viewModel.enterTerminalInputMode()
+        viewModel.terminalInputText = "hel"
+
+        let context = TextContext(
+            fullText: "hel",
+            selectedText: nil,
+            textBeforeCursor: "hel",
+            textAfterCursor: "",
+            wordAtCursor: "hel",
+            cursorPosition: 3,
+            selectedRange: nil,
+            sourceElement: nil
+        )
+        let completions = ["hello", "help", "helicopter"]
+
+        viewModel.exitTerminalInputMode(with: completions, textContext: context)
+
+        XCTAssertFalse(viewModel.isTerminalInputMode, "Terminal mode should be disabled")
+        XCTAssertEqual(viewModel.completions, completions, "Completions should be set")
+        XCTAssertEqual(viewModel.textContext?.wordAtCursor, "hel", "Text context should be set")
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Selected index should be 0")
+    }
+
+    @MainActor
+    func testCompletionViewModel_HasCompletions() {
+        let viewModel = CompletionViewModel()
+
+        XCTAssertFalse(viewModel.hasCompletions, "Should be false when empty")
+
+        viewModel.completions = ["apple"]
+        XCTAssertTrue(viewModel.hasCompletions, "Should be true when has completions")
+    }
+
+    @MainActor
+    func testCompletionViewModel_CompletionCount() {
+        let viewModel = CompletionViewModel()
+
+        XCTAssertEqual(viewModel.completionCount, 0, "Should be 0 when empty")
+
+        viewModel.completions = ["a", "b", "c"]
+        XCTAssertEqual(viewModel.completionCount, 3, "Should return correct count")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectNext_DoesNothingWhenEmpty() {
+        let viewModel = CompletionViewModel()
+        viewModel.selectedIndex = 0
+
+        viewModel.selectNext()
+
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Should not change when empty")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectPrevious_DoesNothingWhenEmpty() {
+        let viewModel = CompletionViewModel()
+        viewModel.selectedIndex = 0
+
+        viewModel.selectPrevious()
+
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Should not change when empty")
+    }
+
+    @MainActor
+    func testCompletionViewModel_SelectAt_DoesNothingWhenEmpty() {
+        let viewModel = CompletionViewModel()
+        viewModel.selectedIndex = 0
+
+        viewModel.select(at: 5)
+
+        XCTAssertEqual(viewModel.selectedIndex, 0, "Should not change when empty")
+    }
+
     // MARK: - Error Handling Tests (Result Types)
 
     func testAccessibilityManager_ExtractTextContext_ReturnsResult() {

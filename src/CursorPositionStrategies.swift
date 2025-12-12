@@ -127,7 +127,8 @@ final class BoundsForRangeStrategy: CursorPositionStrategy {
             return nil
         }
 
-        // Extract CFRange from AXValue
+        // kAXSelectedTextRangeAttribute returns AXValue per API contract
+        // AXValueGetValue validates the type internally
         let axValue = rangeValue as! AXValue
         var range = CFRange()
         guard AXValueGetValue(axValue, .cfRange, &range) else {
@@ -160,7 +161,8 @@ final class BoundsForRangeStrategy: CursorPositionStrategy {
             return nil
         }
 
-        // Extract CGRect from the bounds AXValue
+        // kAXBoundsForRangeParameterizedAttribute returns AXValue per API contract
+        // AXValueGetValue validates the type internally
         let boundsAXValue = bounds as! AXValue
         var rect = CGRect.zero
         guard AXValueGetValue(boundsAXValue, .cgRect, &rect) else {
