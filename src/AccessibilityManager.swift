@@ -25,6 +25,31 @@ struct TextContext {
 
     /// Selected text range
     let selectedRange: CFRange?
+
+    /// Cached reference to the source element (for insertion optimization)
+    /// This eliminates the race condition between text extraction and insertion
+    /// where the element might change if mouse moves or DOM updates.
+    /// May be nil if element couldn't be determined during extraction.
+    let sourceElement: AXUIElement?
+
+    /// Initialize with all fields including source element
+    init(fullText: String,
+         selectedText: String?,
+         textBeforeCursor: String,
+         textAfterCursor: String,
+         wordAtCursor: String,
+         cursorPosition: Int,
+         selectedRange: CFRange?,
+         sourceElement: AXUIElement? = nil) {
+        self.fullText = fullText
+        self.selectedText = selectedText
+        self.textBeforeCursor = textBeforeCursor
+        self.textAfterCursor = textAfterCursor
+        self.wordAtCursor = wordAtCursor
+        self.cursorPosition = cursorPosition
+        self.selectedRange = selectedRange
+        self.sourceElement = sourceElement
+    }
 }
 
 /// Facade for accessibility operations

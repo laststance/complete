@@ -45,10 +45,22 @@ class AccessibilityTextInserter {
 
         let systemWide = AXUIElementCreateSystemWide()
 
-        // Try to get focused element (works for native apps)
-        var focusedElement = elementExtractor.getFocusedElement(from: systemWide)
+        // Strategy 1: Try cached element from text extraction (eliminates race condition)
+        // The element was captured during extractTextContext() and cached in the context
+        var focusedElement: AXUIElement? = context.sourceElement
+        if focusedElement != nil {
+            os_log("✅ Using cached element from text extraction (race-condition-safe)", log: .accessibility, type: .debug)
+        }
 
-        // Fallback for web browsers: use element at cursor position
+        // Strategy 2: Try to get focused element (works for native apps)
+        if focusedElement == nil {
+            focusedElement = elementExtractor.getFocusedElement(from: systemWide)
+            if focusedElement != nil {
+                os_log("✅ Found focused element via kAXFocusedUIElementAttribute", log: .accessibility, type: .debug)
+            }
+        }
+
+        // Strategy 3: Fallback for web browsers: use element at cursor position
         if focusedElement == nil {
             os_log("⚠️  No focused element for insertion (likely web browser), trying element at cursor position...", log: .accessibility, type: .debug)
 

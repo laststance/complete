@@ -253,9 +253,21 @@ final class CursorPositionResolverTests: XCTestCase {
         // (since we can't provide a real AXUIElement in tests)
         let position = resolver.resolve(from: nil)
 
-        // Verify we got a valid position (will be mouse position as fallback)
-        XCTAssertTrue(position.x >= -10000 && position.x <= 10000)
-        XCTAssertTrue(position.y >= -10000 && position.y <= 10000)
+        // Verify we got a valid position within the screen system bounds
+        // Mouse position can be anywhere including:
+        // - Negative values (monitors positioned left/above main display)
+        // - Very large values (4K/5K displays, multi-monitor setups)
+        let totalScreenFrame = NSScreen.screens.reduce(CGRect.zero) { $0.union($1.frame) }
+        let margin: CGFloat = 100
+
+        XCTAssertTrue(position.x >= totalScreenFrame.minX - margin,
+                      "X coordinate \(position.x) below screen bounds \(totalScreenFrame.minX)")
+        XCTAssertTrue(position.x <= totalScreenFrame.maxX + margin,
+                      "X coordinate \(position.x) above screen bounds \(totalScreenFrame.maxX)")
+        XCTAssertTrue(position.y >= totalScreenFrame.minY - margin,
+                      "Y coordinate \(position.y) below screen bounds \(totalScreenFrame.minY)")
+        XCTAssertTrue(position.y <= totalScreenFrame.maxY + margin,
+                      "Y coordinate \(position.y) above screen bounds \(totalScreenFrame.maxY)")
     }
 
     func testCustomStrategies_FirstSuccessfulWins() {

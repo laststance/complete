@@ -11,10 +11,16 @@ final class CompleteTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        // Each test creates its own instances - no shared state
+        // Reset UserDefaults state to ensure test isolation
+        // This prevents test order from affecting results
+        let settingsManager = SettingsManager()
+        settingsManager.resetToDefaults()
     }
 
     override func tearDown() {
+        // Clean up UserDefaults after each test
+        let settingsManager = SettingsManager()
+        settingsManager.resetToDefaults()
         super.tearDown()
     }
 

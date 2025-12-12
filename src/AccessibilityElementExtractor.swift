@@ -142,10 +142,11 @@ class AccessibilityElementExtractor {
             textAfterCursor: textAfter,
             wordAtCursor: wordAtCursor,
             cursorPosition: cursorPosition,
-            selectedRange: selectedRange
+            selectedRange: selectedRange,
+            sourceElement: element
         )
 
-        os_log("📝 Text context extracted:", log: .accessibility, type: .debug)
+        os_log("📝 Text context extracted (element cached for insertion):", log: .accessibility, type: .debug)
         os_log("   Word at cursor: '%{private}@'", log: .accessibility, type: .debug, wordAtCursor)
         os_log("   Cursor position: %{public}d", log: .accessibility, type: .debug, cursorPosition)
         os_log("   Text before: '%{private}@'", log: .accessibility, type: .debug, textBefore.suffix(20))
