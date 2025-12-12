@@ -366,6 +366,13 @@ final class CursorPositionResolver {
     /// app is a browser or Electron app. This is critical for Chrome/Safari/VSCode
     /// which don't expose their accessibility tree by default.
     ///
+    /// ## Browser-Specific Handling
+    /// For browsers, `ElementPositionStrategy` is skipped because it returns the
+    /// element's top-left corner, not the actual cursor position within the text.
+    /// This causes popups to appear at the wrong location (e.g., start of textarea
+    /// instead of where the cursor is). For browsers, we go directly from
+    /// `BoundsForRangeStrategy` to `MousePositionStrategy`.
+    ///
     /// If the provided element is nil, attempts to find an element at the mouse position
     /// before falling back to the mouse position strategy.
     ///
@@ -373,11 +380,12 @@ final class CursorPositionResolver {
     /// - Returns: Cursor position in NSScreen coordinates
     func resolve(from element: AXUIElement?) -> CGPoint {
         var workingElement = element
+        let isBrowser = browserEnabler.isBrowserOrElectronApp()
 
         // CRITICAL: Enable browser accessibility BEFORE querying any attributes
         // This sets AXEnhancedUserInterface for Chrome/Safari and
         // AXManualAccessibility for Electron apps (VSCode, Slack, etc.)
-        if browserEnabler.isBrowserOrElectronApp() {
+        if isBrowser {
             browserEnabler.enableIfNeeded()
             os_log("🌐 CursorPositionResolver: Browser/Electron app detected, accessibility enabled",
                    log: .accessibility, type: .info)
@@ -388,8 +396,24 @@ final class CursorPositionResolver {
             workingElement = findElementAtMousePosition()
         }
 
+        // For browsers, use a modified strategy order:
+        // BoundsForRange → Mouse (skip ElementPosition)
+        // ElementPositionStrategy returns the element's corner, not cursor position,
+        // which causes popup to appear at wrong location in form inputs/textareas.
+        let effectiveStrategies: [CursorPositionStrategy]
+        if isBrowser {
+            effectiveStrategies = strategies.filter { strategy in
+                // Skip ElementPositionStrategy for browsers - it returns wrong position
+                !(strategy is ElementPositionStrategy)
+            }
+            os_log("🌐 CursorPositionResolver: Using browser strategy chain (skipping ElementPosition)",
+                   log: .accessibility, type: .debug)
+        } else {
+            effectiveStrategies = strategies
+        }
+
         // Try each strategy in order
-        for strategy in strategies {
+        for strategy in effectiveStrategies {
             if let position = strategy.getCursorPosition(from: workingElement) {
                 os_log("🎯 CursorPositionResolver: %{public}@ succeeded",
                        log: .accessibility, type: .info, strategy.name)

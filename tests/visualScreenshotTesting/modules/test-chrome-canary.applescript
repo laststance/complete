@@ -12,7 +12,8 @@
 on run argv
     -- Configuration
     set scriptDir to do shell script "cd \"$(dirname \"$0\")\" && pwd"
-    set projectRoot to do shell script "cd \"" & scriptDir & "/../..\" && pwd"
+    -- Go up 3 levels: modules → visualScreenshotTesting → tests → complete (project root)
+    set projectRoot to do shell script "cd \"" & scriptDir & "/../../..\" && pwd"
     set testPagePath to projectRoot & "/tests/visualScreenshotTesting/test-apps/test-page.html"
 
     -- Get output directory from argument or use default

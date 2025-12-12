@@ -86,3 +86,6 @@ tests/visualScreenshotTesting/reports/
 
 # direnv configuration
 .envrc
+
+# Playwright MCP temporary screenshots
+.playwright-mcp/
