@@ -5,23 +5,26 @@
 #
 # Purpose: Automated visual regression testing as a quality gate
 #
-# This script orchestrates the complete visual testing workflow:
-# 1. Builds the Complete app
-# 2. Starts Complete app in background
-# 3. Runs AppleScript test runner to capture screenshots
-# 4. Compares screenshots against baseline expectations using SSIM
-# 5. Generates JSON and HTML reports
-# 6. Returns exit code 0 if ALL tests pass, 1 if ANY fail
+# This script orchestrates the complete visual testing workflow across multiple
+# applications: TextEdit, Chrome Canary, VSCode, and Terminal.
+#
+# Test Coverage:
+#   - TextEdit: 5 positions (top-left, top-right, bottom-left, bottom-right, center)
+#   - Chrome Canary: textarea (3 positions), input (1), address bar (1)
+#   - VSCode: editor (3 positions)
+#   - Terminal: command line (3 positions)
+#   - Total: 18 test cases
 #
 # Usage:
 #   ./run-visual-tests.sh [options]
 #
 # Options:
-#   --skip-build     Skip the build step (use existing build)
+#   --skip-build       Skip the build step (use existing build)
 #   --update-baseline  Update baseline expectations with current captures
-#   --threshold NUM  Set SSIM threshold (default: 0.95)
-#   --verbose        Enable verbose output
-#   --help           Show this help message
+#   --threshold NUM    Set SSIM threshold (default: 0.95)
+#   --verbose          Enable verbose output
+#   --app APP          Test only specific app (textedit|chrome|vscode|terminal|all)
+#   --help             Show this help message
 #
 # Exit Codes:
 #   0 - All tests passed
@@ -42,9 +45,7 @@ EXPECTATIONS_DIR="$SCRIPT_DIR/expectations"
 CAPTURES_DIR="$SCRIPT_DIR/captures"
 REPORTS_DIR="$SCRIPT_DIR/reports"
 DIFFS_DIR="$SCRIPT_DIR/diffs"
-
-# Test positions matching AppleScript test
-TEST_POSITIONS=("top-left" "top-right" "bottom-left" "bottom-right" "center")
+MODULES_DIR="$SCRIPT_DIR/modules"
 
 # Quality thresholds
 DEFAULT_SSIM_THRESHOLD=0.95
@@ -54,12 +55,41 @@ SSIM_THRESHOLD="${DEFAULT_SSIM_THRESHOLD}"
 SKIP_BUILD=false
 UPDATE_BASELINE=false
 VERBOSE=false
+TEST_APP="all"
+
+# App configurations (bash 3.2 compatible - no associative arrays)
+# Use functions to get test lists for each app
+get_app_tests() {
+    local app="$1"
+    case "$app" in
+        textedit)
+            echo "top-left top-right bottom-left bottom-right center"
+            ;;
+        chrome-canary)
+            echo "textarea-center textarea-top-left textarea-bottom-right input-center addressbar"
+            ;;
+        vscode)
+            echo "editor-center editor-top-left editor-bottom-right"
+            ;;
+        terminal)
+            echo "terminal-center terminal-top-left terminal-bottom-right"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# List of all supported apps
+ALL_APPS="textedit chrome-canary vscode terminal"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # =============================================================================
@@ -84,8 +114,12 @@ log_error() {
 
 log_verbose() {
     if [[ "$VERBOSE" == true ]]; then
-        echo -e "${BLUE}[DEBUG]${NC} $1"
+        echo -e "${CYAN}[DEBUG]${NC} $1"
     fi
+}
+
+log_app() {
+    echo -e "${MAGENTA}[APP]${NC} $1"
 }
 
 # =============================================================================
@@ -95,6 +129,7 @@ log_verbose() {
 show_help() {
     cat << EOF
 Visual Regression Test Orchestrator for Complete App
+Comprehensive Multi-App Testing Suite
 
 Usage: $(basename "$0") [options]
 
@@ -103,14 +138,19 @@ Options:
   --update-baseline  Update baseline expectations with current captures
   --threshold NUM    Set SSIM threshold (default: ${DEFAULT_SSIM_THRESHOLD})
   --verbose          Enable verbose output
+  --app APP          Test only specific app (textedit|chrome|vscode|terminal|all)
   --help             Show this help message
 
-Test Positions:
-  top-left, top-right, bottom-left, bottom-right, center
+Test Applications:
+  textedit      Apple TextEdit (5 positions)
+  chrome        Chrome Canary (textarea, input, address bar - 5 tests)
+  vscode        Visual Studio Code (3 positions)
+  terminal      Terminal.app (3 positions)
+  all           All applications (default, 16 total tests)
 
 Quality Criteria:
   - SSIM threshold: ${DEFAULT_SSIM_THRESHOLD} (95% similarity required)
-  - All 5 positions must pass
+  - All tests in selected scope must pass
 
 Output:
   - JSON report: ${REPORTS_DIR}/test-results.json
@@ -121,6 +161,13 @@ Exit Codes:
   0 - All tests passed
   1 - One or more tests failed
   2 - Setup or infrastructure error
+
+Examples:
+  $(basename "$0")                     # Run all tests
+  $(basename "$0") --app textedit      # Run only TextEdit tests
+  $(basename "$0") --app chrome        # Run only Chrome Canary tests
+  $(basename "$0") --update-baseline   # Update all baselines
+  $(basename "$0") --verbose           # Run with debug output
 
 EOF
 }
@@ -144,6 +191,10 @@ parse_args() {
                 VERBOSE=true
                 shift
                 ;;
+            --app)
+                TEST_APP="$2"
+                shift 2
+                ;;
             --help)
                 show_help
                 exit 0
@@ -155,6 +206,17 @@ parse_args() {
                 ;;
         esac
     done
+
+    # Validate app selection
+    case $TEST_APP in
+        all|textedit|chrome|vscode|terminal)
+            ;;
+        *)
+            log_error "Invalid app: $TEST_APP"
+            log_info "Valid options: all, textedit, chrome, vscode, terminal"
+            exit 2
+            ;;
+    esac
 }
 
 # =============================================================================
@@ -164,21 +226,23 @@ parse_args() {
 setup_directories() {
     log_info "Setting up directories..."
 
-    mkdir -p "$CAPTURES_DIR"
+    # Create main directories
+    mkdir -p "$CAPTURES_DIR"/{textedit,chrome-canary,vscode,terminal}
+    mkdir -p "$EXPECTATIONS_DIR"/{textedit,chrome-canary,vscode,terminal}
     mkdir -p "$REPORTS_DIR"
-    mkdir -p "$DIFFS_DIR"
+    mkdir -p "$DIFFS_DIR"/{textedit,chrome-canary,vscode,terminal}
+    mkdir -p "$MODULES_DIR"
 
     # Clean previous captures
-    rm -f "$CAPTURES_DIR"/*.png 2>/dev/null || true
-    rm -f "$DIFFS_DIR"/*.png 2>/dev/null || true
+    rm -f "$CAPTURES_DIR"/*/*.png 2>/dev/null || true
+    rm -f "$DIFFS_DIR"/*/*.png 2>/dev/null || true
 
-    log_verbose "Directories created: captures, reports, diffs"
+    log_verbose "Directories created: captures, expectations, reports, diffs"
 }
 
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
-    # Check for required tools
     local missing_tools=()
 
     if ! command -v swift &> /dev/null; then
@@ -194,7 +258,6 @@ check_prerequisites() {
     fi
 
     # Check for ImageMagick compare (used for diff images only)
-    # SSIM computation uses Python PIL for consistency across platforms
     if command -v compare &> /dev/null; then
         USE_IMAGEMAGICK=true
         log_verbose "ImageMagick 'compare' found (used for diff images)"
@@ -208,21 +271,47 @@ check_prerequisites() {
         exit 2
     fi
 
-    # Check for baseline expectations
-    local missing_expectations=()
-    for position in "${TEST_POSITIONS[@]}"; do
-        if [[ ! -f "$EXPECTATIONS_DIR/${position}.png" ]]; then
-            missing_expectations+=("$position")
-        fi
-    done
-
-    if [[ ${#missing_expectations[@]} -gt 0 ]]; then
-        log_error "Missing baseline expectations: ${missing_expectations[*]}"
-        log_info "Run with --update-baseline to create new baselines"
-        exit 2
+    # Check for baseline expectations based on selected app
+    if [[ "$UPDATE_BASELINE" != true ]]; then
+        check_baseline_expectations
     fi
 
     log_success "All prerequisites satisfied"
+}
+
+check_baseline_expectations() {
+    local missing_expectations=()
+
+    # Check expectations based on selected app
+    local apps_to_check=()
+    case $TEST_APP in
+        all)
+            apps_to_check=("textedit" "chrome-canary" "vscode" "terminal")
+            ;;
+        chrome)
+            apps_to_check=("chrome-canary")
+            ;;
+        *)
+            apps_to_check=("$TEST_APP")
+            ;;
+    esac
+
+    for app in "${apps_to_check[@]}"; do
+        local test_names
+        test_names="$(get_app_tests "$app")"
+        for test_name in $test_names; do
+            local exp_file="$EXPECTATIONS_DIR/$app/${test_name}.png"
+            if [[ ! -f "$exp_file" ]]; then
+                missing_expectations+=("$app/${test_name}")
+            fi
+        done
+    done
+
+    if [[ ${#missing_expectations[@]} -gt 0 ]]; then
+        log_warning "Missing baseline expectations: ${missing_expectations[*]}"
+        log_info "Run with --update-baseline to create new baselines"
+        # Don't exit - allow test to proceed and create baselines
+    fi
 }
 
 # =============================================================================
@@ -254,13 +343,11 @@ build_app() {
 start_complete_app() {
     log_info "Starting Complete app..."
 
-    # Check if already running
     if pgrep -x "Complete" > /dev/null; then
         log_verbose "Complete app already running"
         return 0
     fi
 
-    # Try to start from build directory first
     local build_path="$PROJECT_ROOT/.build/debug/Complete"
 
     if [[ -f "$build_path" ]]; then
@@ -276,7 +363,6 @@ start_complete_app() {
         exit 2
     fi
 
-    # Verify it started
     if pgrep -x "Complete" > /dev/null; then
         log_success "Complete app started"
     else
@@ -293,73 +379,101 @@ stop_complete_app() {
 # Test Execution Functions
 # =============================================================================
 
-run_screenshot_tests() {
+run_app_tests() {
+    local app="$1"
+    local app_dir=""
+    local module_script=""
+
+    case $app in
+        textedit)
+            app_dir="textedit"
+            module_script="$MODULES_DIR/test-textedit.applescript"
+            ;;
+        chrome)
+            app_dir="chrome-canary"
+            module_script="$MODULES_DIR/test-chrome-canary.applescript"
+            ;;
+        vscode)
+            app_dir="vscode"
+            module_script="$MODULES_DIR/test-vscode.applescript"
+            ;;
+        terminal)
+            app_dir="terminal"
+            module_script="$MODULES_DIR/test-terminal.applescript"
+            ;;
+    esac
+
+    log_app "Testing: $app"
+
+    if [[ ! -f "$module_script" ]]; then
+        log_error "Test module not found: $module_script"
+        return 1
+    fi
+
+    local capture_dir="$CAPTURES_DIR/$app_dir"
+    mkdir -p "$capture_dir"
+
+    log_verbose "Running: osascript $module_script $capture_dir"
+
+    if osascript "$module_script" "$capture_dir" 2>&1 | while IFS= read -r line; do
+        if [[ "$VERBOSE" == true ]]; then
+            echo "  $line"
+        elif [[ "$line" == *"CAPTURED:"* ]] || [[ "$line" == *"ERROR:"* ]]; then
+            echo "  $line"
+        fi
+    done; then
+        log_success "$app tests completed"
+        return 0
+    else
+        log_warning "$app tests had issues"
+        return 1
+    fi
+}
+
+run_all_tests() {
     log_info "Running screenshot capture tests..."
 
-    # Modify the AppleScript to save to our captures directory
-    local applescript_path="$SCRIPT_DIR/test-popup-positions.applescript"
+    local apps_to_test=()
 
-    if [[ ! -f "$applescript_path" ]]; then
-        log_error "AppleScript test file not found: $applescript_path"
-        exit 2
-    fi
+    case $TEST_APP in
+        all)
+            apps_to_test=("textedit" "chrome" "vscode" "terminal")
+            ;;
+        *)
+            apps_to_test=("$TEST_APP")
+            ;;
+    esac
 
-    # Create a temporary AppleScript that saves to our captures directory
-    local temp_applescript=$(mktemp)
-    sed "s|set screenshotDir to.*|set screenshotDir to \"$CAPTURES_DIR/\"|" \
-        "$applescript_path" > "$temp_applescript"
+    local test_failures=0
 
-    log_verbose "Running AppleScript test runner..."
-
-    if osascript "$temp_applescript" 2>&1; then
-        log_success "Screenshot capture completed"
-    else
-        log_error "Screenshot capture failed"
-        rm -f "$temp_applescript"
-        exit 2
-    fi
-
-    rm -f "$temp_applescript"
-
-    # Verify captures exist
-    local missing_captures=()
-    for position in "${TEST_POSITIONS[@]}"; do
-        if [[ ! -f "$CAPTURES_DIR/${position}.png" ]]; then
-            missing_captures+=("$position")
+    for app in "${apps_to_test[@]}"; do
+        echo ""
+        if ! run_app_tests "$app"; then
+            ((test_failures++))
         fi
     done
 
-    if [[ ${#missing_captures[@]} -gt 0 ]]; then
-        log_error "Missing captures: ${missing_captures[*]}"
-        exit 2
+    if [[ $test_failures -gt 0 ]]; then
+        log_warning "$test_failures app(s) had test issues"
+    else
+        log_success "All app tests completed"
     fi
-
-    log_success "All ${#TEST_POSITIONS[@]} screenshots captured"
 }
 
 # =============================================================================
 # SSIM Comparison Functions
 # =============================================================================
 
-# Python script for SSIM calculation (embedded)
 SSIM_PYTHON_SCRIPT='
 import sys
-import json
 from PIL import Image
-import math
 
 def compute_ssim_pil(img1_path, img2_path):
-    """
-    Compute a simplified SSIM-like metric using PIL.
-    Returns a value between 0 and 1, where 1 means identical.
-    """
     try:
-        img1 = Image.open(img1_path).convert("L")  # Convert to grayscale
+        img1 = Image.open(img1_path).convert("L")
         img2 = Image.open(img2_path).convert("L")
 
-        # Resize to same dimensions if different
         if img1.size != img2.size:
-            # Resize img2 to match img1
             img2 = img2.resize(img1.size, Image.Resampling.LANCZOS)
 
         pixels1 = list(img1.getdata())
@@ -369,20 +483,16 @@ def compute_ssim_pil(img1_path, img2_path):
         if n == 0:
             return 0.0
 
-        # Calculate means
         mean1 = sum(pixels1) / n
         mean2 = sum(pixels2) / n
 
-        # Calculate variances and covariance
         var1 = sum((p - mean1) ** 2 for p in pixels1) / n
         var2 = sum((p - mean2) ** 2 for p in pixels2) / n
         covar = sum((p1 - mean1) * (p2 - mean2) for p1, p2 in zip(pixels1, pixels2)) / n
 
-        # SSIM constants
         C1 = (0.01 * 255) ** 2
         C2 = (0.03 * 255) ** 2
 
-        # SSIM formula
         numerator = (2 * mean1 * mean2 + C1) * (2 * covar + C2)
         denominator = (mean1 ** 2 + mean2 ** 2 + C1) * (var1 + var2 + C2)
 
@@ -400,34 +510,13 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python ssim.py <image1> <image2>", file=sys.stderr)
         sys.exit(1)
-
     ssim = compute_ssim_pil(sys.argv[1], sys.argv[2])
     print(f"{ssim:.6f}")
 '
 
-compute_ssim_imagemagick() {
-    local expected="$1"
-    local actual="$2"
-    local diff_output="$3"
-
-    # Use ImageMagick compare with DSSIM metric (returns dissimilarity)
-    # Note: ImageMagick SSIM returns (raw_value, normalized_dissimilarity)
-    # We extract the normalized value and convert to similarity (1 - dissimilarity)
-    local result
-    result=$(compare -metric DSSIM "$expected" "$actual" "$diff_output" 2>&1 || true)
-
-    # Extract the dissimilarity value and convert to similarity
-    local dssim
-    dssim=$(echo "$result" | grep -oE '[0-9]+\.?[0-9]*' | head -1 || echo "1")
-
-    # Convert DSSIM to SSIM-like similarity (1 - dssim, clamped to [0,1])
-    python3 -c "print(max(0.0, min(1.0, 1.0 - float('$dssim'))))"
-}
-
 compute_ssim_python() {
     local expected="$1"
     local actual="$2"
-
     python3 -c "$SSIM_PYTHON_SCRIPT" "$expected" "$actual"
 }
 
@@ -439,10 +528,8 @@ generate_diff_image() {
     if [[ "$USE_IMAGEMAGICK" == true ]]; then
         compare -compose src "$expected" "$actual" "$diff_output" 2>/dev/null || true
     else
-        # Python fallback for diff generation
         python3 << EOF
 from PIL import Image, ImageChops
-import sys
 
 try:
     img1 = Image.open("$expected").convert("RGB")
@@ -454,8 +541,7 @@ try:
     diff = ImageChops.difference(img1, img2)
     diff.save("$diff_output")
 except Exception as e:
-    print(f"Error generating diff: {e}", file=sys.stderr)
-    sys.exit(1)
+    print(f"Error generating diff: {e}")
 EOF
     fi
 }
@@ -465,41 +551,89 @@ compare_screenshots() {
 
     local all_passed=true
     local test_results=()
+    local total_tests=0
+    local passed_tests=0
+    local failed_tests=0
+    local skipped_tests=0
 
-    for position in "${TEST_POSITIONS[@]}"; do
-        local expected="$EXPECTATIONS_DIR/${position}.png"
-        local actual="$CAPTURES_DIR/${position}.png"
-        local diff="$DIFFS_DIR/${position}-diff.png"
+    # Determine which apps to compare
+    local apps_to_compare=()
+    case $TEST_APP in
+        all)
+            apps_to_compare=("textedit" "chrome-canary" "vscode" "terminal")
+            ;;
+        chrome)
+            apps_to_compare=("chrome-canary")
+            ;;
+        *)
+            apps_to_compare=("$TEST_APP")
+            ;;
+    esac
 
-        log_verbose "Comparing: $position"
+    for app in "${apps_to_compare[@]}"; do
+        local test_names
+        test_names="$(get_app_tests "$app")"
+        log_verbose "Comparing $app tests..."
 
-        # Compute SSIM using Python (consistent across platforms)
-        local ssim
-        ssim=$(compute_ssim_python "$expected" "$actual")
+        for test_name in $test_names; do
+            local expected="$EXPECTATIONS_DIR/$app/${test_name}.png"
+            local actual="$CAPTURES_DIR/$app/${test_name}.png"
+            local diff="$DIFFS_DIR/$app/${test_name}-diff.png"
 
-        # Generate diff image
-        generate_diff_image "$expected" "$actual" "$diff"
+            ((total_tests++))
 
-        # Determine pass/fail
-        local passed
-        if (( $(echo "$ssim >= $SSIM_THRESHOLD" | bc -l) )); then
-            passed=true
-            log_success "$position: SSIM=$ssim (threshold: $SSIM_THRESHOLD)"
-        else
-            passed=false
-            all_passed=false
-            log_error "$position: SSIM=$ssim (threshold: $SSIM_THRESHOLD)"
-        fi
+            # Skip if capture doesn't exist
+            if [[ ! -f "$actual" ]]; then
+                log_warning "$app/$test_name: capture missing (skipped)"
+                ((skipped_tests++))
+                test_results+=("{\"app\": \"$app\", \"position\": \"$test_name\", \"expected\": \"$expected\", \"actual\": \"$actual\", \"ssim\": 0, \"passed\": false, \"status\": \"skipped\"}")
+                continue
+            fi
 
-        # Store result
-        test_results+=("{\"position\": \"$position\", \"expected\": \"$expected\", \"actual\": \"$actual\", \"ssim\": $ssim, \"passed\": $passed, \"diff\": \"$diff\"}")
+            # Skip if expectation doesn't exist
+            if [[ ! -f "$expected" ]]; then
+                log_warning "$app/$test_name: baseline missing (skipped)"
+                ((skipped_tests++))
+                test_results+=("{\"app\": \"$app\", \"position\": \"$test_name\", \"expected\": \"$expected\", \"actual\": \"$actual\", \"ssim\": 0, \"passed\": false, \"status\": \"no_baseline\"}")
+                continue
+            fi
+
+            # Compute SSIM
+            local ssim
+            ssim=$(compute_ssim_python "$expected" "$actual")
+
+            # Generate diff image
+            mkdir -p "$(dirname "$diff")"
+            generate_diff_image "$expected" "$actual" "$diff"
+
+            # Determine pass/fail
+            local passed
+            local status
+            if (( $(echo "$ssim >= $SSIM_THRESHOLD" | bc -l) )); then
+                passed=true
+                status="passed"
+                ((passed_tests++))
+                log_success "$app/$test_name: SSIM=$ssim"
+            else
+                passed=false
+                status="failed"
+                all_passed=false
+                ((failed_tests++))
+                log_error "$app/$test_name: SSIM=$ssim (threshold: $SSIM_THRESHOLD)"
+            fi
+
+            test_results+=("{\"app\": \"$app\", \"position\": \"$test_name\", \"expected\": \"$expected\", \"actual\": \"$actual\", \"ssim\": $ssim, \"passed\": $passed, \"diff\": \"$diff\", \"status\": \"$status\"}")
+        done
     done
 
     # Generate reports
-    generate_json_report "${test_results[@]}"
-    generate_html_report "${test_results[@]}"
+    generate_json_report "$total_tests" "$passed_tests" "$failed_tests" "$skipped_tests" "${test_results[@]}"
+    generate_html_report "$total_tests" "$passed_tests" "$failed_tests" "$skipped_tests" "${test_results[@]}"
 
-    if [[ "$all_passed" == true ]]; then
+    echo ""
+    log_info "Test Summary: $passed_tests passed, $failed_tests failed, $skipped_tests skipped (total: $total_tests)"
+
+    if [[ "$all_passed" == true ]] && [[ $skipped_tests -eq 0 ]]; then
         return 0
     else
         return 1
@@ -511,27 +645,21 @@ compare_screenshots() {
 # =============================================================================
 
 generate_json_report() {
+    local total="$1"
+    local passed="$2"
+    local failed="$3"
+    local skipped="$4"
+    shift 4
     local -a results=("$@")
+
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    local passed_count=0
-    local failed_count=0
-
-    for result in "${results[@]}"; do
-        if echo "$result" | grep -q '"passed": true'; then
-            ((passed_count++))
-        else
-            ((failed_count++))
-        fi
-    done
-
     local all_passed=false
-    if [[ $failed_count -eq 0 ]]; then
+    if [[ $failed -eq 0 ]] && [[ $skipped -eq 0 ]]; then
         all_passed=true
     fi
 
-    # Build JSON array
     local tests_json
     tests_json=$(printf '%s\n' "${results[@]}" | paste -sd ',' -)
 
@@ -540,10 +668,12 @@ generate_json_report() {
   "timestamp": "$timestamp",
   "passed": $all_passed,
   "threshold": $SSIM_THRESHOLD,
+  "apps_tested": "$TEST_APP",
   "summary": {
-    "total": ${#TEST_POSITIONS[@]},
-    "passed": $passed_count,
-    "failed": $failed_count
+    "total": $total,
+    "passed": $passed,
+    "failed": $failed,
+    "skipped": $skipped
   },
   "tests": [
     $tests_json
@@ -555,47 +685,58 @@ EOF
 }
 
 generate_html_report() {
+    local total="$1"
+    local passed="$2"
+    local failed="$3"
+    local skipped="$4"
+    shift 4
     local -a results=("$@")
+
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    local passed_count=0
-    local failed_count=0
-
-    for result in "${results[@]}"; do
-        if echo "$result" | grep -q '"passed": true'; then
-            ((passed_count++))
-        else
-            ((failed_count++))
-        fi
-    done
-
     local status_class="pass"
     local status_text="ALL TESTS PASSED"
-    if [[ $failed_count -gt 0 ]]; then
+    if [[ $failed -gt 0 ]]; then
         status_class="fail"
-        status_text="$failed_count TEST(S) FAILED"
+        status_text="$failed TEST(S) FAILED"
+    elif [[ $skipped -gt 0 ]]; then
+        status_class="warn"
+        status_text="$skipped TEST(S) SKIPPED"
     fi
 
     # Generate test rows
     local test_rows=""
     for result in "${results[@]}"; do
-        local position=$(echo "$result" | grep -oP '"position":\s*"\K[^"]+')
-        local ssim=$(echo "$result" | grep -oP '"ssim":\s*\K[0-9.]+')
-        local passed=$(echo "$result" | grep -oP '"passed":\s*\K(true|false)')
-        local expected=$(echo "$result" | grep -oP '"expected":\s*"\K[^"]+')
-        local actual=$(echo "$result" | grep -oP '"actual":\s*"\K[^"]+')
-        local diff=$(echo "$result" | grep -oP '"diff":\s*"\K[^"]+')
+        # Extract fields using sed (compatible with macOS)
+        local app=$(echo "$result" | sed -n 's/.*"app": "\([^"]*\)".*/\1/p')
+        local position=$(echo "$result" | sed -n 's/.*"position": "\([^"]*\)".*/\1/p')
+        local ssim=$(echo "$result" | sed -n 's/.*"ssim": \([0-9.]*\).*/\1/p')
+        local status=$(echo "$result" | sed -n 's/.*"status": "\([^"]*\)".*/\1/p')
+        local expected=$(echo "$result" | sed -n 's/.*"expected": "\([^"]*\)".*/\1/p')
+        local actual=$(echo "$result" | sed -n 's/.*"actual": "\([^"]*\)".*/\1/p')
+        local diff=$(echo "$result" | sed -n 's/.*"diff": "\([^"]*\)".*/\1/p')
 
         local row_class="pass"
         local row_status="PASS"
-        if [[ "$passed" == "false" ]]; then
-            row_class="fail"
-            row_status="FAIL"
-        fi
+        case $status in
+            passed)
+                row_class="pass"
+                row_status="PASS"
+                ;;
+            failed)
+                row_class="fail"
+                row_status="FAIL"
+                ;;
+            skipped|no_baseline)
+                row_class="skip"
+                row_status="SKIP"
+                ;;
+        esac
 
         test_rows+="
         <tr class=\"$row_class\">
+            <td><span class=\"app-badge\">$app</span></td>
             <td><strong>$position</strong></td>
             <td class=\"ssim\">$ssim</td>
             <td class=\"status-$row_class\">$row_status</td>
@@ -603,22 +744,22 @@ generate_html_report() {
                 <div class=\"image-comparison\">
                     <div class=\"image-container\">
                         <h4>Expected</h4>
-                        <img src=\"file://$expected\" alt=\"Expected $position\" />
+                        <img src=\"file://$expected\" alt=\"Expected\" onerror=\"this.style.display='none'\" />
                     </div>
                     <div class=\"image-container\">
                         <h4>Actual</h4>
-                        <img src=\"file://$actual\" alt=\"Actual $position\" />
+                        <img src=\"file://$actual\" alt=\"Actual\" onerror=\"this.style.display='none'\" />
                     </div>
                     <div class=\"image-container\">
                         <h4>Diff</h4>
-                        <img src=\"file://$diff\" alt=\"Diff $position\" />
+                        <img src=\"file://$diff\" alt=\"Diff\" onerror=\"this.style.display='none'\" />
                     </div>
                 </div>
             </td>
         </tr>"
     done
 
-    cat > "$REPORTS_DIR/test-results.html" << EOF
+    cat > "$REPORTS_DIR/test-results.html" << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -629,31 +770,21 @@ generate_html_report() {
         :root {
             --pass-color: #22c55e;
             --fail-color: #ef4444;
+            --skip-color: #f59e0b;
             --bg-color: #1a1a2e;
             --card-bg: #16213e;
             --text-color: #e5e7eb;
             --border-color: #374151;
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             line-height: 1.6;
             padding: 2rem;
         }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
+        .container { max-width: 1600px; margin: 0 auto; }
         header {
             text-align: center;
             margin-bottom: 2rem;
@@ -662,52 +793,22 @@ generate_html_report() {
             border-radius: 12px;
             border: 1px solid var(--border-color);
         }
-
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .timestamp {
-            color: #9ca3af;
-            font-size: 0.9rem;
-        }
-
-        .summary {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin: 1.5rem 0;
-        }
-
+        h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+        .subtitle { color: #9ca3af; font-size: 1rem; margin-bottom: 1rem; }
+        .timestamp { color: #6b7280; font-size: 0.9rem; }
+        .summary { display: flex; justify-content: center; gap: 1rem; margin: 1.5rem 0; flex-wrap: wrap; }
         .summary-card {
             padding: 1rem 2rem;
             border-radius: 8px;
             text-align: center;
+            min-width: 100px;
         }
-
-        .summary-card.total {
-            background: #3b82f6;
-        }
-
-        .summary-card.passed {
-            background: var(--pass-color);
-        }
-
-        .summary-card.failed {
-            background: var(--fail-color);
-        }
-
-        .summary-card .number {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-
-        .summary-card .label {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-        }
-
+        .summary-card.total { background: #3b82f6; }
+        .summary-card.passed { background: var(--pass-color); }
+        .summary-card.failed { background: var(--fail-color); }
+        .summary-card.skipped { background: var(--skip-color); }
+        .summary-card .number { font-size: 2rem; font-weight: bold; }
+        .summary-card .label { font-size: 0.8rem; text-transform: uppercase; }
         .status-banner {
             padding: 1rem;
             border-radius: 8px;
@@ -715,23 +816,9 @@ generate_html_report() {
             font-size: 1.2rem;
             margin-top: 1rem;
         }
-
-        .status-banner.pass {
-            background: var(--pass-color);
-        }
-
-        .status-banner.fail {
-            background: var(--fail-color);
-        }
-
-        .threshold-info {
-            margin-top: 1rem;
-            padding: 0.5rem 1rem;
-            background: rgba(255,255,255,0.1);
-            border-radius: 4px;
-            display: inline-block;
-        }
-
+        .status-banner.pass { background: var(--pass-color); }
+        .status-banner.fail { background: var(--fail-color); }
+        .status-banner.warn { background: var(--skip-color); }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -740,139 +827,76 @@ generate_html_report() {
             border-radius: 12px;
             overflow: hidden;
         }
-
-        th, td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border-color); }
         th {
             background: rgba(0,0,0,0.3);
             font-weight: 600;
             text-transform: uppercase;
             font-size: 0.8rem;
-            letter-spacing: 0.05em;
         }
-
-        tr.pass {
-            background: rgba(34, 197, 94, 0.1);
+        tr.pass { background: rgba(34, 197, 94, 0.1); }
+        tr.fail { background: rgba(239, 68, 68, 0.1); }
+        tr.skip { background: rgba(245, 158, 11, 0.1); }
+        .ssim { font-family: 'SF Mono', Monaco, monospace; font-size: 1.1rem; font-weight: bold; }
+        .status-pass { color: var(--pass-color); font-weight: bold; }
+        .status-fail { color: var(--fail-color); font-weight: bold; }
+        .status-skip { color: var(--skip-color); font-weight: bold; }
+        .app-badge {
+            background: rgba(59, 130, 246, 0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
         }
-
-        tr.fail {
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .ssim {
-            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-            font-size: 1.1rem;
-            font-weight: bold;
-        }
-
-        .status-pass {
-            color: var(--pass-color);
-            font-weight: bold;
-        }
-
-        .status-fail {
-            color: var(--fail-color);
-            font-weight: bold;
-        }
-
-        .image-comparison {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .image-container {
-            flex: 1;
-            min-width: 200px;
-        }
-
-        .image-container h4 {
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            color: #9ca3af;
-        }
-
+        .image-comparison { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .image-container { flex: 1; min-width: 150px; }
+        .image-container h4 { margin-bottom: 0.5rem; font-size: 0.8rem; color: #9ca3af; }
         .image-container img {
             max-width: 100%;
-            max-height: 200px;
+            max-height: 150px;
             border-radius: 4px;
             border: 1px solid var(--border-color);
             cursor: pointer;
-            transition: transform 0.2s;
         }
-
-        .image-container img:hover {
-            transform: scale(1.05);
-        }
-
-        footer {
-            text-align: center;
-            margin-top: 2rem;
-            padding: 1rem;
-            color: #6b7280;
-            font-size: 0.9rem;
-        }
-
-        /* Modal for full-size images */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 1000;
-            cursor: pointer;
-        }
-
-        .modal img {
-            max-width: 90%;
-            max-height: 90%;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
+        footer { text-align: center; margin-top: 2rem; padding: 1rem; color: #6b7280; font-size: 0.9rem; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Visual Regression Test Report</h1>
-            <p class="timestamp">Generated: $timestamp</p>
+            <h1>🧪 Visual Regression Test Report</h1>
+            <p class="subtitle">Complete App - Multi-Application Testing Suite</p>
+HTMLEOF
 
+    echo "            <p class=\"timestamp\">Generated: $timestamp</p>" >> "$REPORTS_DIR/test-results.html"
+
+    cat >> "$REPORTS_DIR/test-results.html" << HTMLEOF2
             <div class="summary">
                 <div class="summary-card total">
-                    <div class="number">${#TEST_POSITIONS[@]}</div>
-                    <div class="label">Total Tests</div>
+                    <div class="number">$total</div>
+                    <div class="label">Total</div>
                 </div>
                 <div class="summary-card passed">
-                    <div class="number">$passed_count</div>
+                    <div class="number">$passed</div>
                     <div class="label">Passed</div>
                 </div>
                 <div class="summary-card failed">
-                    <div class="number">$failed_count</div>
+                    <div class="number">$failed</div>
                     <div class="label">Failed</div>
                 </div>
+                <div class="summary-card skipped">
+                    <div class="number">$skipped</div>
+                    <div class="label">Skipped</div>
+                </div>
             </div>
-
             <div class="status-banner $status_class">$status_text</div>
-
-            <div class="threshold-info">
-                SSIM Threshold: $SSIM_THRESHOLD (${SSIM_THRESHOLD%.*}% similarity required)
-            </div>
         </header>
-
         <table>
             <thead>
                 <tr>
-                    <th>Position</th>
-                    <th>SSIM Score</th>
+                    <th>App</th>
+                    <th>Test</th>
+                    <th>SSIM</th>
                     <th>Status</th>
                     <th>Visual Comparison</th>
                 </tr>
@@ -881,38 +905,14 @@ generate_html_report() {
                 $test_rows
             </tbody>
         </table>
-
         <footer>
             <p>Complete App - Visual Regression Testing</p>
-            <p>Report generated by run-visual-tests.sh</p>
+            <p>Apps tested: $TEST_APP | Threshold: $SSIM_THRESHOLD</p>
         </footer>
     </div>
-
-    <div class="modal" id="modal" onclick="closeModal()">
-        <img id="modal-img" src="" alt="Full size image" />
-    </div>
-
-    <script>
-        // Click on images to show full size
-        document.querySelectorAll('.image-container img').forEach(img => {
-            img.addEventListener('click', (e) => {
-                e.stopPropagation();
-                document.getElementById('modal-img').src = img.src;
-                document.getElementById('modal').style.display = 'block';
-            });
-        });
-
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-        }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
-        });
-    </script>
 </body>
 </html>
-EOF
+HTMLEOF2
 
     log_info "HTML report generated: $REPORTS_DIR/test-results.html"
 }
@@ -924,19 +924,44 @@ EOF
 update_baseline() {
     log_info "Updating baseline expectations..."
 
-    for position in "${TEST_POSITIONS[@]}"; do
-        local capture="$CAPTURES_DIR/${position}.png"
-        local expectation="$EXPECTATIONS_DIR/${position}.png"
+    local apps_to_update=()
+    case $TEST_APP in
+        all)
+            apps_to_update=("textedit" "chrome-canary" "vscode" "terminal")
+            ;;
+        chrome)
+            apps_to_update=("chrome-canary")
+            ;;
+        *)
+            apps_to_update=("$TEST_APP")
+            ;;
+    esac
 
-        if [[ -f "$capture" ]]; then
-            cp "$capture" "$expectation"
-            log_success "Updated: $position"
-        else
-            log_warning "Missing capture for: $position"
-        fi
+    local updated=0
+    local missing=0
+
+    for app in "${apps_to_update[@]}"; do
+        local test_names
+        test_names="$(get_app_tests "$app")"
+
+        for test_name in $test_names; do
+            local capture="$CAPTURES_DIR/$app/${test_name}.png"
+            local expectation="$EXPECTATIONS_DIR/$app/${test_name}.png"
+
+            if [[ -f "$capture" ]]; then
+                mkdir -p "$(dirname "$expectation")"
+                cp "$capture" "$expectation"
+                log_success "Updated: $app/$test_name"
+                ((updated++))
+            else
+                log_warning "Missing capture: $app/$test_name"
+                ((missing++))
+            fi
+        done
     done
 
-    log_success "Baseline expectations updated"
+    echo ""
+    log_info "Baseline update complete: $updated updated, $missing missing"
 }
 
 # =============================================================================
@@ -946,8 +971,11 @@ update_baseline() {
 cleanup() {
     log_verbose "Cleaning up..."
 
-    # Close TextEdit documents that might be left open
+    # Close TextEdit documents
     osascript -e 'tell application "TextEdit" to close every document saving no' 2>/dev/null || true
+
+    # Close Chrome test tabs/windows opened by tests
+    # (Cleanup handled by individual test modules)
 }
 
 # =============================================================================
@@ -961,23 +989,21 @@ main() {
     echo ""
     echo "================================================================="
     echo "  Complete App - Visual Regression Test Suite"
+    echo "  Multi-Application Testing: TextEdit, Chrome, VSCode, Terminal"
     echo "================================================================="
     echo ""
 
     parse_args "$@"
 
-    # Set up trap for cleanup
     trap cleanup EXIT
 
-    # Setup phase
     setup_directories
 
     if [[ "$UPDATE_BASELINE" == true ]]; then
-        # Just run tests and update baseline
-        check_prerequisites || true  # Don't fail if expectations missing
+        check_prerequisites || true
         build_app
         start_complete_app
-        run_screenshot_tests
+        run_all_tests
         update_baseline
 
         local end_time
@@ -994,7 +1020,7 @@ main() {
     check_prerequisites
     build_app
     start_complete_app
-    run_screenshot_tests
+    run_all_tests
 
     local test_result=0
     if compare_screenshots; then
@@ -1011,19 +1037,15 @@ main() {
     echo "================================================================="
     if [[ $test_result -eq 0 ]]; then
         log_success "All visual regression tests PASSED in ${duration}s"
-        echo ""
-        echo "  Reports:"
-        echo "    JSON: $REPORTS_DIR/test-results.json"
-        echo "    HTML: $REPORTS_DIR/test-results.html"
     else
         log_error "Visual regression tests FAILED in ${duration}s"
-        echo ""
-        echo "  Reports:"
-        echo "    JSON: $REPORTS_DIR/test-results.json"
-        echo "    HTML: $REPORTS_DIR/test-results.html"
-        echo ""
-        echo "  Review diff images in: $DIFFS_DIR/"
     fi
+    echo ""
+    echo "  Reports:"
+    echo "    JSON: $REPORTS_DIR/test-results.json"
+    echo "    HTML: $REPORTS_DIR/test-results.html"
+    echo ""
+    echo "  Diff images: $DIFFS_DIR/"
     echo "================================================================="
     echo ""
 

@@ -1,83 +1,210 @@
-# Manual Test Scripts
+# Visual Regression Testing Suite
 
-This directory contains manual test scripts used during development and debugging. These scripts complement the automated test suite when visual verification or specific system interaction patterns are needed.
+Comprehensive visual regression testing for the Complete app across multiple applications.
+
+## Test Coverage
+
+| Application | Test Cases | Description |
+|-------------|------------|-------------|
+| **TextEdit** | 5 | Native macOS app with full Accessibility API |
+| **Chrome Canary** | 5 | Browser textarea, input, and address bar |
+| **VSCode** | 3 | Electron-based editor |
+| **Terminal.app** | 3 | CLI with clipboard fallback mode |
+| **Total** | 16 | Comprehensive multi-app coverage |
+
+## Quick Start
+
+```bash
+# Run all visual tests
+./tests/visualScreenshotTesting/run-visual-tests.sh --verbose
+
+# Run specific app tests
+./tests/visualScreenshotTesting/run-visual-tests.sh --app textedit --verbose
+./tests/visualScreenshotTesting/run-visual-tests.sh --app chrome --verbose
+./tests/visualScreenshotTesting/run-visual-tests.sh --app vscode --verbose
+./tests/visualScreenshotTesting/run-visual-tests.sh --app terminal --verbose
+
+# Update baselines after verified changes
+./tests/visualScreenshotTesting/run-visual-tests.sh --update-baseline
+```
 
 ## Directory Structure
 
 ```
 visualScreenshotTesting/
-├── expectations/                    # Baseline screenshots for regression testing
-│   ├── top-left.png
-│   ├── top-right.png
-│   ├── bottom-left.png
-│   ├── bottom-right.png
-│   ├── center.png
-│   └── README.md
-├── test-popup-positions.applescript # Main visual position test
-├── test-browser-addressbar.applescript
-├── ManualTestingChecklist.md
-├── README.md
-├── test_insertion_visual.sh
-└── test_focus.sh
+├── run-visual-tests.sh              # Main orchestrator script
+├── modules/                          # AppleScript test modules
+│   ├── test-textedit.applescript    # TextEdit tests (5 positions)
+│   ├── test-chrome-canary.applescript # Chrome tests (5 cases)
+│   ├── test-vscode.applescript      # VSCode tests (3 positions)
+│   └── test-terminal.applescript    # Terminal tests (3 positions)
+├── test-apps/                        # Test assets
+│   └── test-page.html               # HTML page for browser tests
+├── expectations/                     # Baseline screenshots
+│   ├── textedit/                    # TextEdit baselines
+│   ├── chrome-canary/               # Chrome baselines
+│   ├── vscode/                      # VSCode baselines
+│   └── terminal/                    # Terminal baselines
+├── captures/                         # Test run screenshots
+├── diffs/                            # Comparison diff images
+└── reports/                          # JSON and HTML reports
 ```
 
-## Visual Regression Testing (Recommended Workflow)
+## Test Applications
 
-### Running Tests
+### TextEdit (Primary Test)
+- **Type**: Native macOS Cocoa app
+- **Accessibility**: Full AXUIElement API support
+- **Positions**: top-left, top-right, bottom-left, bottom-right, center
+- **Why Primary**: Best-case scenario for accessibility-based positioning
+
+### Chrome Canary (Browser Test)
+- **Type**: Chromium browser
+- **Accessibility**: Browser accessibility mode + AXFrame coordinates
+- **Test Cases**:
+  - `textarea-center`: Standard textarea element
+  - `textarea-top-left`: Textarea at screen edge
+  - `textarea-bottom-right`: Textarea at opposite edge
+  - `input-center`: Input type="text" element
+  - `addressbar`: Browser address bar (special case)
+
+### VSCode (Electron Test)
+- **Type**: Electron-based editor
+- **Accessibility**: Requires accessibility enablement
+- **Positions**: editor-center, editor-top-left, editor-bottom-right
+- **Note**: Tests clipboard fallback for Electron apps
+
+### Terminal.app (CLI Test)
+- **Type**: Native terminal emulator
+- **Accessibility**: Limited - uses clipboard-based fallback
+- **Positions**: terminal-center, terminal-top-left, terminal-bottom-right
+- **Note**: Validates "Terminal input mode" feature
+
+## CI/CD Integration
+
+Visual tests run via GitHub Actions:
+
+```yaml
+# .github/workflows/visual-regression.yml
+- Validates test infrastructure on every push
+- Full visual tests require self-hosted runner with accessibility permissions
+- Artifacts: screenshots, diff images, HTML reports
+```
+
+### Why Self-Hosted Runner?
+
+GitHub-hosted macOS runners lack:
+1. GUI session (required for AppleScript)
+2. Accessibility permissions (required for System Events)
+3. Real display (required for screenshots)
+
+For full automation, use a self-hosted macOS runner with accessibility permissions granted.
+
+## Running Tests Locally
+
+### Prerequisites
+
+1. **Build Complete app**:
+   ```bash
+   swift build
+   ```
+
+2. **Grant accessibility permissions**:
+   - System Settings → Privacy & Security → Accessibility
+   - Add Terminal.app (or your terminal emulator)
+
+3. **Install test applications** (optional):
+   - Chrome Canary (for browser tests)
+   - VSCode (for Electron tests)
+
+### Full Test Run
 
 ```bash
-# 1. Build the app
-swift build
+# Build and run all tests
+./tests/visualScreenshotTesting/run-visual-tests.sh --verbose
 
-# 2. Run the visual position test
-osascript tests/visualScreenshotTesting/test-popup-positions.applescript
-
-# 3. Screenshots saved to ~/Desktop/complete-popup-tests/
+# Skip build if already built
+./tests/visualScreenshotTesting/run-visual-tests.sh --skip-build --verbose
 ```
 
-### Comparing Against Expectations
+### Individual App Tests
 
-The `expectations/` directory contains baseline screenshots showing correct popup positioning. After running tests:
+```bash
+# TextEdit only (fastest, has existing baselines)
+./tests/visualScreenshotTesting/run-visual-tests.sh --app textedit --verbose
 
-1. Open expectation image: `tests/visualScreenshotTesting/expectations/[position].png`
-2. Open test result image: `~/Desktop/complete-popup-tests/[position].png`
-3. Compare side-by-side focusing on:
-   - Text cursor position (where "Hell" appears)
-   - Popup window position relative to cursor
-   - Distance between cursor and popup (~50px expected)
+# Chrome only (requires Chrome Canary installed)
+./tests/visualScreenshotTesting/run-visual-tests.sh --app chrome --verbose
+```
 
-See `expectations/README.md` for detailed comparison criteria.
+### Update Baselines
 
-## Scripts
+After making **intentional** changes to popup positioning:
 
-### test-popup-positions.applescript
-- **Purpose**: Automated popup position testing at 5 screen locations
-- **Output**: Screenshots in ~/Desktop/complete-popup-tests/
-- **Use case**: Visual regression testing for popup positioning
-- **Comparison**: Compare results against `expectations/` baseline images
+```bash
+# Update all baselines
+./tests/visualScreenshotTesting/run-visual-tests.sh --update-baseline
 
-### test-browser-addressbar.applescript
-- **Purpose**: Test popup behavior in browser address bars
-- **Use case**: Verifying fallback to mouse position when accessibility API fails
+# Update specific app baselines
+./tests/visualScreenshotTesting/run-visual-tests.sh --app textedit --update-baseline
+```
 
-### test_focus.sh
-- **Purpose**: Debug keyboard focus issues
-- **Use case**: Testing window activation and keyboard event handling
-- **When to use**: When debugging focus-related issues that automated tests can't reproduce
+## Quality Criteria
 
-### test_insertion_visual.sh
-- **Purpose**: Visual validation of text insertion with screenshots
-- **Use case**: End-to-end testing with real applications (TextEdit)
-- **When to use**: Before releases, or when debugging insertion behavior in specific apps
+| Metric | Threshold | Description |
+|--------|-----------|-------------|
+| SSIM Score | ≥ 0.95 | 95% structural similarity required |
+| Pass Requirement | 100% | All tests must pass |
 
-## Running Manual Tests
+### What SSIM Measures
 
-These scripts are not part of the automated CI/CD pipeline. Run them manually when:
-- Debugging platform-specific focus or insertion issues
-- Verifying behavior in real applications
-- Creating visual documentation for bug reports
-- **Performing visual regression testing against expectations**
+- **Structural Similarity**: Compares image structure, not just pixels
+- **Tolerance**: Handles minor environmental differences (time, date display)
+- **Threshold**: 0.95 allows ~5% variance for non-critical differences
 
-## Note
+### False Negatives
 
-Automated tests (in `tests/`) should be preferred when possible. These manual scripts are kept for scenarios that require human visual verification or complex system interactions that are difficult to automate.
+Environmental factors can cause low SSIM scores even with correct positioning:
+- Different desktop wallpaper
+- Different time/date in menu bar
+- Different windows open in background
+
+**Always manually verify screenshots when SSIM fails** - check popup-to-cursor distance.
+
+## Test Reports
+
+### JSON Report
+```
+tests/visualScreenshotTesting/reports/test-results.json
+```
+
+### HTML Report
+```
+tests/visualScreenshotTesting/reports/test-results.html
+```
+
+Open in browser for visual comparison with pass/fail status.
+
+## Troubleshooting
+
+### "Accessibility permissions required"
+Grant accessibility permissions to your terminal app in System Settings.
+
+### Tests interrupted
+AppleScript GUI automation takes control of keyboard/mouse. Don't interact with the computer during tests (~2 minutes).
+
+### Chrome/VSCode tests skipped
+Install the required applications. Tests gracefully skip if apps are not found.
+
+### Low SSIM but popup looks correct
+Environmental differences (background, time). Manually verify popup position relative to cursor.
+
+## Legacy Scripts
+
+These scripts are kept for reference but replaced by the modular system:
+
+| Script | Replaced By |
+|--------|-------------|
+| `test-popup-positions.applescript` | `modules/test-textedit.applescript` |
+| `capture-screenshots.applescript` | `modules/test-textedit.applescript` |
+| `test-browser-addressbar.applescript` | `modules/test-chrome-canary.applescript` |

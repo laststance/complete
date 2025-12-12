@@ -1,0 +1,315 @@
+# =============================================================================
+# Visual Regression Testing Workflow
+# =============================================================================
+#
+# This workflow validates the Complete app's visual regression test infrastructure
+# and runs tests where possible on GitHub Actions macOS runners.
+#
+# Note: Full GUI automation (AppleScript) has limitations on CI runners due to
+# accessibility permissions. This workflow validates infrastructure and runs
+# what's possible in headless mode.
+#
+# For full visual testing, use a self-hosted macOS runner with accessibility
+# permissions, or run locally via: ./tests/visualScreenshotTesting/run-visual-tests.sh
+#
+# =============================================================================
+
+name: Visual Regression Tests
+
+on:
+  push:
+    branches: [main, 'fix/**', 'feature/**']
+    paths:
+      - 'Sources/**'
+      - 'tests/visualScreenshotTesting/**'
+      - 'Package.swift'
+      - '.github/workflows/visual-regression.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'tests/visualScreenshotTesting/**'
+      - 'Package.swift'
+  workflow_dispatch:
+    inputs:
+      full_visual_test:
+        description: 'Run full visual tests (requires self-hosted runner)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+jobs:
+  # ===========================================================================
+  # Job 1: Build and Validate Infrastructure
+  # ===========================================================================
+  build-and-validate:
+    name: Build & Validate Test Infrastructure
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build Complete app
+        run: |
+          echo "🔨 Building Complete app..."
+          swift build -c release
+          echo "✅ Build successful"
+
+      - name: Validate bash script syntax
+        run: |
+          echo "🔍 Validating run-visual-tests.sh..."
+          bash -n tests/visualScreenshotTesting/run-visual-tests.sh
+          echo "✅ Bash syntax valid"
+
+      - name: Validate AppleScript syntax
+        run: |
+          echo "🔍 Validating AppleScript modules..."
+          for script in tests/visualScreenshotTesting/modules/*.applescript; do
+            echo "  Checking $(basename $script)..."
+            osacompile -o /dev/null "$script"
+          done
+          echo "✅ All AppleScript modules valid"
+
+      - name: Verify test infrastructure
+        run: |
+          echo "📁 Verifying directory structure..."
+
+          # Check required directories exist
+          for dir in expectations captures diffs modules reports test-apps; do
+            if [[ -d "tests/visualScreenshotTesting/$dir" ]]; then
+              echo "  ✅ $dir/"
+            else
+              echo "  ❌ Missing: $dir/"
+              exit 1
+            fi
+          done
+
+          # Check required files exist
+          echo ""
+          echo "📝 Verifying required files..."
+          required_files=(
+            "tests/visualScreenshotTesting/run-visual-tests.sh"
+            "tests/visualScreenshotTesting/modules/test-textedit.applescript"
+            "tests/visualScreenshotTesting/modules/test-chrome-canary.applescript"
+            "tests/visualScreenshotTesting/modules/test-vscode.applescript"
+            "tests/visualScreenshotTesting/modules/test-terminal.applescript"
+            "tests/visualScreenshotTesting/test-apps/test-page.html"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ -f "$file" ]]; then
+              echo "  ✅ $(basename $file)"
+            else
+              echo "  ❌ Missing: $file"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✅ All infrastructure verified"
+
+      - name: Check baseline expectations
+        run: |
+          echo "🖼️ Checking baseline expectations..."
+
+          # TextEdit baselines (required)
+          textedit_baselines=$(ls tests/visualScreenshotTesting/expectations/textedit/*.png 2>/dev/null | wc -l)
+          echo "  TextEdit baselines: $textedit_baselines"
+
+          if [[ $textedit_baselines -lt 5 ]]; then
+            echo "  ⚠️ Warning: TextEdit should have 5 baseline images"
+          else
+            echo "  ✅ TextEdit baselines complete"
+          fi
+
+          # Other app baselines (optional - may not exist yet)
+          for app in chrome-canary vscode terminal; do
+            count=$(ls tests/visualScreenshotTesting/expectations/$app/*.png 2>/dev/null | wc -l)
+            if [[ $count -gt 0 ]]; then
+              echo "  ✅ $app: $count baselines"
+            else
+              echo "  ⚠️ $app: No baselines yet (run --update-baseline locally)"
+            fi
+          done
+
+      - name: Generate infrastructure report
+        run: |
+          echo "📊 Generating infrastructure report..."
+
+          cat << 'EOF' > infrastructure-report.md
+          # Visual Regression Test Infrastructure Report
+
+          ## Build Status
+          - **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **Commit**: ${{ github.sha }}
+          - **Branch**: ${{ github.ref_name }}
+
+          ## Infrastructure Validation
+          EOF
+
+          echo "### Scripts" >> infrastructure-report.md
+          echo "| Script | Status |" >> infrastructure-report.md
+          echo "|--------|--------|" >> infrastructure-report.md
+          echo "| run-visual-tests.sh | ✅ Valid |" >> infrastructure-report.md
+
+          for script in tests/visualScreenshotTesting/modules/*.applescript; do
+            echo "| $(basename $script) | ✅ Valid |" >> infrastructure-report.md
+          done
+
+          echo "" >> infrastructure-report.md
+          echo "### Baseline Images" >> infrastructure-report.md
+          echo "| App | Count | Status |" >> infrastructure-report.md
+          echo "|-----|-------|--------|" >> infrastructure-report.md
+
+          for app in textedit chrome-canary vscode terminal; do
+            count=$(ls tests/visualScreenshotTesting/expectations/$app/*.png 2>/dev/null | wc -l | tr -d ' ')
+            if [[ $count -gt 0 ]]; then
+              echo "| $app | $count | ✅ Ready |" >> infrastructure-report.md
+            else
+              echo "| $app | 0 | ⚠️ Needs baseline |" >> infrastructure-report.md
+            fi
+          done
+
+          cat infrastructure-report.md
+
+      - name: Upload infrastructure report
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-report
+          path: infrastructure-report.md
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 2: Unit Tests
+  # ===========================================================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: macos-14
+    needs: build-and-validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Run unit tests
+        run: |
+          echo "🧪 Running unit tests..."
+          swift test --filter "CompleteTests" 2>&1 | tee test-output.log
+          echo "✅ Unit tests completed"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: test-output.log
+          retention-days: 7
+
+  # ===========================================================================
+  # Job 3: Visual Tests (Self-Hosted Runner Only)
+  # ===========================================================================
+  visual-tests:
+    name: Visual Regression Tests
+    runs-on: self-hosted  # Requires self-hosted macOS runner with accessibility
+    needs: build-and-validate
+    if: github.event.inputs.full_visual_test == 'true' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check accessibility permissions
+        run: |
+          echo "🔐 Checking accessibility permissions..."
+          # This will fail on GitHub-hosted runners
+          if ! osascript -e 'tell application "System Events" to return name of first process'; then
+            echo "❌ Accessibility permissions not available"
+            echo "   This job requires a self-hosted runner with:"
+            echo "   1. macOS with GUI session"
+            echo "   2. Accessibility permissions granted"
+            echo "   3. Complete app installed"
+            exit 1
+          fi
+          echo "✅ Accessibility permissions available"
+
+      - name: Build Complete app
+        run: swift build -c release
+
+      - name: Run visual regression tests
+        run: |
+          echo "🖼️ Running visual regression tests..."
+          ./tests/visualScreenshotTesting/run-visual-tests.sh --verbose
+        timeout-minutes: 10
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-test-screenshots
+          path: |
+            tests/visualScreenshotTesting/captures/
+            tests/visualScreenshotTesting/diffs/
+          retention-days: 30
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-test-reports
+          path: |
+            tests/visualScreenshotTesting/reports/test-results.json
+            tests/visualScreenshotTesting/reports/test-results.html
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 4: Summary
+  # ===========================================================================
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-validate, unit-tests]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 📊 Visual Regression Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build & Validate | ${{ needs.build-and-validate.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Notes" >> $GITHUB_STEP_SUMMARY
+          echo "- Full visual tests require a self-hosted macOS runner with accessibility permissions" >> $GITHUB_STEP_SUMMARY
+          echo "- Run locally: \`./tests/visualScreenshotTesting/run-visual-tests.sh --verbose\`" >> $GITHUB_STEP_SUMMARY
