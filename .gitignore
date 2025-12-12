@@ -80,6 +80,9 @@ Complete.app/
 # Visual screenshot testing outputs (generated files)
 tests/visualScreenshotTesting/*.png
 tests/visualScreenshotTesting/*.jpg
+tests/visualScreenshotTesting/captures/
+tests/visualScreenshotTesting/diffs/
+tests/visualScreenshotTesting/reports/
 
 # direnv configuration
 .envrc
