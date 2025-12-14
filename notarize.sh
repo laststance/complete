@@ -182,6 +182,22 @@ else
     print_warning "AppIcon.icns not found - app will use default icon"
 fi
 
+# Copy SPM resource bundles (critical for KeyboardShortcuts localization)
+print_step "Copying SPM resource bundles..."
+BUNDLE_COUNT=0
+for bundle in "$BUILD_DIR"/*.bundle; do
+    if [ -d "$bundle" ]; then
+        cp -R "$bundle" "${APP_BUNDLE}/Contents/Resources/"
+        BUNDLE_COUNT=$((BUNDLE_COUNT + 1))
+        echo "  Copied: $(basename "$bundle")"
+    fi
+done
+if [ "$BUNDLE_COUNT" -eq 0 ]; then
+    print_warning "No SPM resource bundles found - this may cause runtime issues"
+else
+    print_success "Copied $BUNDLE_COUNT SPM resource bundle(s)"
+fi
+
 # Set executable permissions
 chmod +x "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
@@ -190,7 +206,18 @@ print_success "App bundle created: ${APP_BUNDLE}"
 # Step 3: Code Sign App Bundle
 print_step "Signing app bundle with hardened runtime..."
 
-# First sign the binary inside the bundle
+# First sign any resource bundles
+for bundle in "${APP_BUNDLE}/Contents/Resources"/*.bundle; do
+    if [ -d "$bundle" ]; then
+        echo "  Signing: $(basename "$bundle")"
+        codesign --force --options runtime \
+          --sign "$DEVELOPER_ID" \
+          --timestamp \
+          "$bundle"
+    fi
+done
+
+# Then sign the binary inside the bundle
 codesign --force --options runtime \
   --entitlements "$ENTITLEMENTS" \
   --sign "$DEVELOPER_ID" \

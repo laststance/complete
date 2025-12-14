@@ -136,6 +136,21 @@ cp "$BINARY_PATH" "${APP_BUNDLE}/Contents/MacOS/"
 cp "src/Resources/Info.plist" "${APP_BUNDLE}/Contents/"
 cp "src/Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/"
 
+# Copy SPM resource bundles (critical for KeyboardShortcuts localization)
+BUNDLE_COUNT=0
+for bundle in ".build/${BUILD_CONFIG}"/*.bundle; do
+    if [ -d "$bundle" ]; then
+        cp -R "$bundle" "${APP_BUNDLE}/Contents/Resources/"
+        BUNDLE_COUNT=$((BUNDLE_COUNT + 1))
+        echo "  Copied: $(basename "$bundle")"
+    fi
+done
+if [ "$BUNDLE_COUNT" -eq 0 ]; then
+    print_warning "No SPM resource bundles found - this may cause runtime issues"
+else
+    print_success "Copied $BUNDLE_COUNT SPM resource bundle(s)"
+fi
+
 print_success "Files copied"
 
 # Step 4: Set permissions

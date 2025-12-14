@@ -44,19 +44,22 @@ class HotkeyManager {
 
     /// Set up global hotkey listeners for completion trigger
     private func setupHotkey() {
+        // Capture coordinator directly to avoid Swift 6 concurrency issues with weak self
+        let coordinator = workflowCoordinator
+
         // Register handler for primary completion trigger shortcut
-        KeyboardShortcuts.onKeyDown(for: .completionTrigger) { [weak self] in
+        KeyboardShortcuts.onKeyDown(for: .completionTrigger) {
             os_log("Primary hotkey triggered", log: .hotkey, type: .info)
             Task { @MainActor in
-                self?.workflowCoordinator.executeWorkflow()
+                coordinator.executeWorkflow()
             }
         }
 
         // Register handler for secondary completion trigger shortcut
-        KeyboardShortcuts.onKeyDown(for: .completionTrigger2) { [weak self] in
+        KeyboardShortcuts.onKeyDown(for: .completionTrigger2) {
             os_log("Secondary hotkey triggered", log: .hotkey, type: .info)
             Task { @MainActor in
-                self?.workflowCoordinator.executeWorkflow()
+                coordinator.executeWorkflow()
             }
         }
 
