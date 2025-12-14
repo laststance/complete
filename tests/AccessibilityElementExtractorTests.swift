@@ -216,7 +216,13 @@ final class AccessibilityElementExtractorTests: XCTestCase {
         XCTAssertEqual(fixedStrategy.callCount, 1, "Should call strategy once")
     }
 
-    func testGetCursorScreenPosition_AlwaysReturnsSuccess() {
+    func testGetCursorScreenPosition_AlwaysReturnsSuccess() throws {
+        // Skip in CI environment - mouse position returns garbage values
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CI"] != nil,
+            "Skipping mouse position test in CI environment (no valid display)"
+        )
+
         // Given: Any extractor setup
         let mockPermissionManager = MockAccessibilityPermissionManager(permissionGranted: true)
         let extractor = AccessibilityElementExtractor(permissionManager: mockPermissionManager)

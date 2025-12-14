@@ -34,12 +34,11 @@ final class CoordinateConverterTests: XCTestCase {
 
     // MARK: - accessibilityToNSScreen Tests
 
-    func testAccessibilityToNSScreen_BasicConversion() {
+    func testAccessibilityToNSScreen_BasicConversion() throws {
         // Given: A point at (100, 50) in Accessibility coords (top-left origin)
         // On a screen of height 1000 at origin (0, 0)
         guard let screen = NSScreen.main else {
-            XCTSkip("No screen available for testing")
-            return
+            throw XCTSkip("No screen available for testing")
         }
 
         let accessibilityPoint = CGPoint(x: 100, y: 50)
@@ -55,10 +54,9 @@ final class CoordinateConverterTests: XCTestCase {
         XCTAssertEqual(nsPoint.y, expectedY, accuracy: 0.001, "Y should be converted from top-left to bottom-left origin")
     }
 
-    func testAccessibilityToNSScreen_OriginPoint() {
+    func testAccessibilityToNSScreen_OriginPoint() throws {
         guard let screen = NSScreen.main else {
-            XCTSkip("No screen available for testing")
-            return
+            throw XCTSkip("No screen available for testing")
         }
 
         // Given: Origin in Accessibility coords (0, 0) = top-left of screen
@@ -73,10 +71,9 @@ final class CoordinateConverterTests: XCTestCase {
         XCTAssertEqual(nsPoint.y, expectedY, accuracy: 0.001, "Y=0 in accessibility should map to screen height in NSScreen")
     }
 
-    func testAccessibilityToNSScreen_BottomOfScreen() {
+    func testAccessibilityToNSScreen_BottomOfScreen() throws {
         guard let screen = NSScreen.main else {
-            XCTSkip("No screen available for testing")
-            return
+            throw XCTSkip("No screen available for testing")
         }
 
         // Given: Point at bottom of screen in Accessibility coords
@@ -92,10 +89,9 @@ final class CoordinateConverterTests: XCTestCase {
 
     // MARK: - nsScreenToAccessibility Tests
 
-    func testNSScreenToAccessibility_BasicConversion() {
+    func testNSScreenToAccessibility_BasicConversion() throws {
         guard let screen = NSScreen.main else {
-            XCTSkip("No screen available for testing")
-            return
+            throw XCTSkip("No screen available for testing")
         }
 
         let nsPoint = CGPoint(x: 100, y: screen.frame.origin.y + 50)
@@ -111,10 +107,9 @@ final class CoordinateConverterTests: XCTestCase {
         XCTAssertEqual(accessibilityPoint.y, expectedY, accuracy: 0.001)
     }
 
-    func testRoundTripConversion() {
+    func testRoundTripConversion() throws {
         guard let screen = NSScreen.main else {
-            XCTSkip("No screen available for testing")
-            return
+            throw XCTSkip("No screen available for testing")
         }
 
         // Given: An arbitrary point
@@ -131,10 +126,9 @@ final class CoordinateConverterTests: XCTestCase {
 
     // MARK: - findContainingScreen Tests
 
-    func testFindContainingScreen_PointOnMainScreen() {
+    func testFindContainingScreen_PointOnMainScreen() throws {
         guard let mainScreen = NSScreen.main else {
-            XCTSkip("No main screen available")
-            return
+            throw XCTSkip("No main screen available")
         }
 
         // Given: A point within the main screen bounds (in accessibility coords)
@@ -245,7 +239,13 @@ final class CursorPositionStrategyTests: XCTestCase {
 
 final class CursorPositionResolverTests: XCTestCase {
 
-    func testDefaultInitialization() {
+    func testDefaultInitialization() throws {
+        // Skip in CI environment - mouse position returns invalid values
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CI"] != nil,
+            "Skipping mouse position test in CI environment (no valid display)"
+        )
+
         // When: Creating resolver with default init
         let resolver = CursorPositionResolver()
 
@@ -460,10 +460,9 @@ final class CursorPositionIntegrationTests: XCTestCase {
         XCTAssertNotNil(position)
     }
 
-    func testCoordinateConverterRoundTrip() {
+    func testCoordinateConverterRoundTrip() throws {
         guard let screen = NSScreen.main else {
-            XCTSkip("No screen available")
-            return
+            throw XCTSkip("No screen available")
         }
 
         let converter = CoordinateConverter()

@@ -16,9 +16,16 @@ final class CrossAppIntegrationTests: XCTestCase {
 
     var autocompleteApp: XCUIApplication!
 
-    override func setUp() {
-        super.setUp()
+    override func setUpWithError() throws {
+        try super.setUpWithError()
         continueAfterFailure = false
+
+        // Skip all GUI-dependent tests when running in CI environment
+        // GitHub Actions sets CI=true environment variable
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CI"] != nil,
+            "Skipping GUI-dependent integration tests in CI environment (no display available)"
+        )
 
         // Launch autocomplete app
         autocompleteApp = XCUIApplication()
