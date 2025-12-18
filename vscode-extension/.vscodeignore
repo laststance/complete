@@ -7,7 +7,9 @@ test-workspace/**
 .vscode/**
 .vscode-test.mjs
 tsconfig.json
+tsconfig.test.json
 esbuild.js
+esbuild.test.mjs
 eslint.config.mjs
 .eslintrc*
 
@@ -15,11 +17,16 @@ eslint.config.mjs
 .gitignore
 .git/**
 node_modules/**
-*.map
 
 # Build artifacts not needed
 **/*.ts
 !dist/**/*.d.ts
+**/*.map
+dist/src/**
+dist/test/**
+
+# GitHub workflows not needed in extension
+.github/**
 
 # Documentation (optional - include if desired)
 # README.md is included by default for marketplace

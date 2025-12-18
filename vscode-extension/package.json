@@ -1,19 +1,29 @@
 {
   "name": "complete",
   "displayName": "Complete - Spell Autocomplete",
-  "description": "System-wide spell autocomplete triggered by Ctrl+I",
+  "description": "System-wide spell autocomplete triggered by Ctrl+I. Get instant spelling suggestions in any editor.",
   "version": "0.1.0",
   "publisher": "laststance",
   "license": "MIT",
+  "icon": "assets/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/laststance/complete"
+  },
+  "homepage": "https://laststance.github.io/complete/",
+  "bugs": {
+    "url": "https://github.com/laststance/complete/issues"
+  },
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
   },
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Education"
   ],
   "keywords": [
     "spell",
