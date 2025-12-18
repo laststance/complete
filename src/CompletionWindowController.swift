@@ -539,6 +539,14 @@ class CompletionWindowController: NSWindowController {
             viewModel.selectPrevious()
             return nil
 
+        case 45 where event.modifierFlags.contains(.control): // Ctrl+N (Emacs: next line)
+            viewModel.selectNext()
+            return nil
+
+        case 35 where event.modifierFlags.contains(.control): // Ctrl+P (Emacs: previous line)
+            viewModel.selectPrevious()
+            return nil
+
         case 36: // Return/Enter
             handleSelection()
             return nil

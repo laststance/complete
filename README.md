@@ -13,7 +13,7 @@ System-wide spell autocomplete for macOS triggered by global hotkey (Shift+Comma
 - ✅ Dual hotkey support (primary + secondary)
 - ✅ Floating completion window with smart positioning
 - ✅ TextEdit-quality spell completions (NSSpellChecker)
-- ✅ Keyboard navigation (arrow keys, Enter, Escape)
+- ✅ Keyboard navigation (arrow keys, Ctrl+P/N, Enter, Escape)
 - ✅ Background agent (no dock icon, status bar menu)
 - ✅ Dark mode support
 - ✅ Settings persistence
