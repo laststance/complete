@@ -49,12 +49,12 @@ suite('SpellEngine Test Suite', () => {
     test('should return suggestions for misspelled word', async function () {
       this.timeout(10000);
       const suggestions = await engine.getSuggestions('helo');
-      assert.ok(suggestions.length > 0, 'Should return at least one suggestion');
+      assert.ok(suggestions.length > 0, `Should return at least one suggestion, got: ${JSON.stringify(suggestions)}`);
       // 'hello' should be among the suggestions
       const hasHello = suggestions.some(
         (s) => s.toLowerCase() === 'hello'
       );
-      assert.ok(hasHello, 'Should suggest "hello" for "helo"');
+      assert.ok(hasHello, `Should suggest "hello" for "helo", got: ${suggestions.join(', ')}`);
     });
 
     test('should return empty array for empty string', async () => {

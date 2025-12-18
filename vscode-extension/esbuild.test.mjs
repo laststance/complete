@@ -1,7 +1,7 @@
 /**
  * esbuild configuration for test files
  *
- * Bundles test files with proper ESM/CJS interop for cspell-lib
+ * Bundles test files with CJS format.
  */
 import * as esbuild from 'esbuild';
 import { glob } from 'glob';

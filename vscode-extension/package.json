@@ -86,8 +86,8 @@
     "keybindings": [
       {
         "command": "complete.triggerCompletion",
-        "key": "ctrl+i",
-        "mac": "ctrl+i",
+        "key": "ctrl+x ctrl+i",
+        "mac": "ctrl+x ctrl+i",
         "when": "editorTextFocus"
       }
     ]
