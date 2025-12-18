@@ -10,6 +10,10 @@
 import * as vscode from 'vscode';
 import { SpellEngine } from './services/spellEngine';
 import { QuickPickProvider, createTriggerCommand } from './providers/quickPickProvider';
+import {
+  SpellCompletionProvider,
+  createCompletionProviderRegistration,
+} from './providers/completionProvider';
 import { getConfig, onConfigChange } from './utils/config';
 
 /**
@@ -21,6 +25,16 @@ let spellEngine: SpellEngine | null = null;
  * Global QuickPick provider instance
  */
 let quickPickProvider: QuickPickProvider | null = null;
+
+/**
+ * Global inline completion provider instance
+ */
+let completionProvider: SpellCompletionProvider | null = null;
+
+/**
+ * Disposable for the completion provider registration
+ */
+let completionProviderRegistration: vscode.Disposable | null = null;
 
 /**
  * Extension activation handler
@@ -52,6 +66,20 @@ export async function activate(
   // Register the trigger completion command
   const triggerCommand = createTriggerCommand(quickPickProvider);
 
+  // Create inline completion provider
+  completionProvider = new SpellCompletionProvider(spellEngine, {
+    maxSuggestions: config.maxSuggestions,
+  });
+
+  // Register inline completion provider if enabled
+  if (config.enableInlineCompletions) {
+    completionProviderRegistration = createCompletionProviderRegistration(
+      completionProvider,
+      config.triggerCharacters
+    );
+    context.subscriptions.push(completionProviderRegistration);
+  }
+
   // Listen for configuration changes
   const configListener = onConfigChange((newConfig) => {
     if (spellEngine) {
@@ -59,6 +87,29 @@ export async function activate(
         maxSuggestions: newConfig.maxSuggestions,
         language: newConfig.language,
       });
+    }
+
+    // Update completion provider config
+    if (completionProvider) {
+      completionProvider.updateConfig({
+        maxSuggestions: newConfig.maxSuggestions,
+      });
+    }
+
+    // Handle enabling/disabling inline completions
+    if (newConfig.enableInlineCompletions && !completionProviderRegistration) {
+      // Enable: register provider
+      if (completionProvider) {
+        completionProviderRegistration = createCompletionProviderRegistration(
+          completionProvider,
+          newConfig.triggerCharacters
+        );
+        context.subscriptions.push(completionProviderRegistration);
+      }
+    } else if (!newConfig.enableInlineCompletions && completionProviderRegistration) {
+      // Disable: dispose registration
+      completionProviderRegistration.dispose();
+      completionProviderRegistration = null;
     }
   });
 
@@ -77,5 +128,10 @@ export function deactivate(): void {
     spellEngine = null;
   }
   quickPickProvider = null;
+  completionProvider = null;
+  if (completionProviderRegistration) {
+    completionProviderRegistration.dispose();
+    completionProviderRegistration = null;
+  }
   console.log('Complete extension deactivated');
 }
