@@ -85,8 +85,9 @@
   "scripts": {
     "vscode:prepublish": "npm run build",
     "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap",
+    "build:tests": "node esbuild.test.mjs",
     "watch": "npm run build -- --watch --sourcemap",
-    "pretest": "npm run build",
+    "pretest": "npm run build && npm run build:tests",
     "test": "vscode-test",
     "lint": "eslint src --ext ts",
     "lint:fix": "eslint src --ext ts --fix",
