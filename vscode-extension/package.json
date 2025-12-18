@@ -1,0 +1,115 @@
+{
+  "name": "complete",
+  "displayName": "Complete - Spell Autocomplete",
+  "description": "System-wide spell autocomplete triggered by Ctrl+I",
+  "version": "0.1.0",
+  "publisher": "laststance",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/laststance/complete"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "spell",
+    "autocomplete",
+    "completion",
+    "spelling",
+    "dictionary"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Complete",
+      "properties": {
+        "complete.enableInlineCompletions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable inline completion suggestions while typing"
+        },
+        "complete.maxSuggestions": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Maximum number of suggestions to show"
+        },
+        "complete.triggerCharacters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Characters that trigger inline completion (empty = manual only)"
+        },
+        "complete.language": {
+          "type": "string",
+          "default": "en",
+          "enum": [
+            "en",
+            "en-GB",
+            "de",
+            "fr",
+            "es",
+            "it",
+            "pt",
+            "nl"
+          ],
+          "description": "Dictionary language for spell suggestions"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "complete.triggerCompletion",
+        "title": "Complete: Show Spelling Suggestions"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "complete.triggerCompletion",
+        "key": "ctrl+i",
+        "mac": "ctrl+i",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap",
+    "watch": "npm run build -- --watch --sourcemap",
+    "pretest": "npm run build",
+    "test": "vscode-test",
+    "lint": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "glob": "^11.0.0",
+    "mocha": "^10.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "dependencies": {
+    "cspell-lib": "^9.0.0"
+  }
+}

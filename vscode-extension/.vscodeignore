@@ -1,0 +1,42 @@
+# Source files (not needed in extension)
+src/**
+test/**
+test-workspace/**
+
+# Configuration files
+.vscode/**
+.vscode-test.mjs
+tsconfig.json
+esbuild.js
+eslint.config.mjs
+.eslintrc*
+
+# Development files
+.gitignore
+.git/**
+node_modules/**
+*.map
+
+# Build artifacts not needed
+**/*.ts
+!dist/**/*.d.ts
+
+# Documentation (optional - include if desired)
+# README.md is included by default for marketplace
+
+# Package files
+*.vsix
+package-lock.json
+
+# Test files
+**/*.test.js
+**/*.test.ts
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/**
+*.swp
+*.swo
