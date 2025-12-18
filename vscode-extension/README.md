@@ -46,12 +46,38 @@ npm run package
 
 ## Configuration
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `complete.enableInlineCompletions` | `false` | Enable inline completion suggestions |
-| `complete.maxSuggestions` | `10` | Maximum suggestions to show |
-| `complete.triggerCharacters` | `[]` | Characters that trigger inline completion |
-| `complete.language` | `"en"` | Dictionary language |
+Open VSCode Settings (`Ctrl+,` or `Cmd+,`) and search for "Complete" to configure.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `complete.enableInlineCompletions` | boolean | `false` | Enable inline completion suggestions while typing |
+| `complete.maxSuggestions` | number | `10` | Maximum suggestions to show (1-50) |
+| `complete.triggerCharacters` | string[] | `[]` | Characters that trigger inline completion (empty = manual only) |
+| `complete.language` | enum | `"en"` | Dictionary language for spell suggestions |
+
+### Supported Languages
+
+| Code | Language |
+|------|----------|
+| `en` | English (US) |
+| `en-GB` | English (British) |
+| `de` | German |
+| `fr` | French |
+| `es` | Spanish |
+| `it` | Italian |
+| `pt` | Portuguese |
+| `nl` | Dutch |
+
+### Example settings.json
+
+```json
+{
+  "complete.enableInlineCompletions": true,
+  "complete.maxSuggestions": 5,
+  "complete.triggerCharacters": [" "],
+  "complete.language": "en-GB"
+}
+```
 
 ## Development
 
